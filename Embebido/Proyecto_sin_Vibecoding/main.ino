@@ -83,7 +83,7 @@ String s_events [] = {
 typedef void (*transition)();
 
 /*TODO: completar tabla con funciones*/
-transition state_table[MAX_STATES][MAX_EVENTS] = 
+transition state_table[MAX_EVENTS][MAX_STATES] = 
 {
   {none,none,none,none,none,none,none,none,none,none},
   {none,none,none,none,none,none,none,none,none,none},
