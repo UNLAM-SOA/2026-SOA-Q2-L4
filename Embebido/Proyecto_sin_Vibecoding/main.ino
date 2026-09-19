@@ -21,10 +21,16 @@ OneWire oneWire(TEMPERATURE_SENSOR_PIN);
 DallasTemperature sensors(&oneWire);
 // ---------- END VARIABLES ---------- //
 
+
+// ---------- BEGIN TRANSITION FUNCTIONS DECLARATION ---------- //
+void error();
+void none();
+
+
 // ---------- BEGIN STATE MACHINE ---------- //
 /*TODO: definir globales segun diagrama*/
-#define MAX_STATES 1
-#define MAX_EVENTS 1
+#define MAX_STATES 10
+#define MAX_EVENTS 6
 #define MAX_TYPE_EVENTS 1
 
 /*TODO: sumar estados segun diagrama*/
@@ -70,15 +76,21 @@ String s_events [] = {
               "EV_TEMP_NORMAL",
               "EV_PUERTA_ABIERTA",
               "EV_PUERTA_CERRADA"
-                     };
+            };
 
 /*definicion de funciones de la maquina de estados*/
 
 typedef void (*transition)();
 
 /*TODO: completar tabla con funciones*/
-transition state_table[MAX_STATES][MAX_EVENTS] = {
-
+transition state_table[MAX_STATES][MAX_EVENTS] = 
+{
+  {none,none,none,none,none,none,none,none,none,none},
+  {none,none,none,none,none,none,none,none,none,none},
+  {none,none,none,none,none,none,none,none,none,none},
+  {none,none,none,none,none,none,none,none,none,none},
+  {none,none,none,none,none,none,none,none,none,none},
+  {none,none,none,none,none,none,none,none,none,none}
 };
 
 // ---------- END STATE MACHINE ---------- //
@@ -105,4 +117,13 @@ void setup() {
 void loop() {
   // put your main code here, to run repeatedly:
 
+}
+
+// ---------- TRANSITION FUNCTIONS ---------- //
+void error()
+{  
+}
+
+void none()
+{
 }
