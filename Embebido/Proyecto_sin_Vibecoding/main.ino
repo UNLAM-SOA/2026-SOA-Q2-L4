@@ -28,12 +28,49 @@ DallasTemperature sensors(&oneWire);
 #define MAX_TYPE_EVENTS 1
 
 /*TODO: sumar estados segun diagrama*/
-enum states {} current_state;
-String s_states [] = {};
+enum states {
+              ST_INIT,
+              ST_ERROR,
+              ST_SEGURO,
+              ST_PUERTA_ABIERTA,
+              ST_LUZ_DETECTADA,
+              ST_TEMP_ELEVADA,
+              ST_TEMP_ELEVADA_Y_LUZ_DETECTADA,
+              ST_TEMP_ELEVADA_Y_PUERTA_ABIERTA,
+              ST_TEMP_ELEVADA_Y_LUZ_DETECTADA_Y_PUERTA_ABIERTA,
+              ST_LUZ_DETECTADA_Y_PUERTA_ABIERTA
+            } current_state;
 
-/*TODO: sumar eventos segun diagrama*/
-enum events {} new_event;
-String s_events [] = {};
+String s_states [] = {
+              "ST_INIT",
+              "ST_ERROR",
+              "ST_SEGURO",
+              "ST_PUERTA_ABIERTA",
+              "ST_LUZ_DETECTADA",
+              "ST_TEMP_ELEVADA",
+              "ST_TEMP_ELEVADA_Y_LUZ_DETECTADA",
+              "ST_TEMP_ELEVADA_Y_PUERTA_ABIERTA",
+              "ST_TEMP_ELEVADA_Y_LUZ_DETECTADA_Y_PUERTA_ABIERTA",
+              "ST_LUZ_DETECTADA_Y_PUERTA_ABIERTA"
+            };
+
+enum events {
+              EV_SIN_LUZ_DETECTADA,
+              EV_LUZ_DETECTADA,
+              EV_TEMP_ELEVADA,
+              EV_TEMP_NORMAL,
+              EV_PUERTA_ABIERTA,
+              EV_PUERTA_CERRADA
+            } new_event;
+
+String s_events [] = {
+              "EV_SIN_LUZ_DETECTADA",
+              "EV_LUZ_DETECTADA",
+              "EV_TEMP_ELEVADA",
+              "EV_TEMP_NORMAL",
+              "EV_PUERTA_ABIERTA",
+              "EV_PUERTA_CERRADA"
+                     };
 
 /*definicion de funciones de la maquina de estados*/
 
