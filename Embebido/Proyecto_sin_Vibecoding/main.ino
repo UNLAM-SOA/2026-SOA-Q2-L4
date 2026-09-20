@@ -82,16 +82,31 @@ String s_events [] = {
 
 typedef void (*transition)();
 
-/*TODO: completar tabla con funciones*/
-transition state_table[MAX_EVENTS][MAX_STATES] = 
+// ---------- Tabla de estados ---------- //
+transition state_table[MAX_STATES][MAX_EVENTS] =
 {
-  {none,none,none,none,none,none,none,none,none,none},
-  {none,none,none,none,none,none,none,none,none,none},
-  {none,none,none,none,none,none,none,none,none,none},
-  {none,none,none,none,none,none,none,none,none,none},
-  {none,none,none,none,none,none,none,none,none,none},
-  {none,none,none,none,none,none,none,none,none,none}
+  //                                                      EV_SIN_LUZ_DETECTADA  EV_LUZ_DETECTADA  EV_TEMP_ELEVADA  EV_TEMP_NORMAL  EV_PUERTA_ABIERTA  EV_PUERTA_CERRADA
+  /* ST_INIT */                                          { none,                 none,             none,            none,           none,              none },
+  /* ST_ERROR */                                         { none,                 none,             none,            none,           none,              none },
+  /* ST_SEGURO */                                        { none,                 a_luz,            a_temp,          none,           a_puerta,          none },
+  /* ST_PUERTA_ABIERTA */                                { none,                 a_luzpuerta,      a_temppuerta,    none,           none,              a_seguro },
+  /* ST_LUZ_DETECTADA */                                 { a_seguro,             none,             a_luztemp,       none,           a_luzpuerta,       none },
+  /* ST_TEMP_ELEVADA */                                  { none,                 a_luztemp,        none,            a_seguro,       a_temppuerta,      none },
+  /* ST_TEMP_ELEVADA_Y_LUZ_DETECTADA */                  { a_temp,               none,             none,            a_luz,          a_completo,        none },
+  /* ST_TEMP_ELEVADA_Y_PUERTA_ABIERTA */                 { none,                 a_completo,       none,            a_puerta,       none,              a_temp },
+  /* ST_TEMP_ELEVADA_Y_LUZ_DETECTADA_Y_PUERTA_ABIERTA */ { a_temppuerta,         none,             none,            a_luzpuerta,    none,              a_luztemp },
+  /* ST_LUZ_DETECTADA_Y_PUERTA_ABIERTA */                { a_puerta,             none,             a_completo,      none,           none,              a_luz }
 };
+
+// ---------- Funciones de transición de estado ---------- //
+void a_seguro()     { current_state = ST_SEGURO; }
+void a_luz()        { current_state = ST_LUZ_DETECTADA; }
+void a_temp()       { current_state = ST_TEMP_ELEVADA; }
+void a_puerta()     { current_state = ST_PUERTA_ABIERTA; }
+void a_luztemp()    { current_state = ST_TEMP_ELEVADA_Y_LUZ_DETECTADA; }
+void a_luzpuerta()  { current_state = ST_LUZ_DETECTADA_Y_PUERTA_ABIERTA; }
+void a_temppuerta() { current_state = ST_TEMP_ELEVADA_Y_PUERTA_ABIERTA; }
+void a_completo()   { current_state = ST_TEMP_ELEVADA_Y_LUZ_DETECTADA_Y_PUERTA_ABIERTA; }
 
 // ---------- END STATE MACHINE ---------- //
 
