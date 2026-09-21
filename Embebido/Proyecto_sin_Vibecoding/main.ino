@@ -234,11 +234,29 @@ void leer_sensor_temperatura(void* p)
 /*------------------------ FIN FUNCIONES DE LECTURA DE SENSORES ------------------------*/
 
 /*------------------------------- FUNCIONES DE ACTUADORES ------------------------------*/
+void inicializarPWMLed(uint8_t pin, uint8_t canal)
+{
+#if ESP_ARDUINO_VERSION_MAJOR >= 3
+  ledcAttach(pin, FRECUENCIA_PWM, RESOLUCION_PWM);
+#else
+  ledcSetup(canal, FRECUENCIA_PWM, RESOLUCION_PWM);
+  ledcAttachPin(pin, canal);
+#endif
+}
+
+void escribirPWMLed(uint8_t pin, uint8_t canal, uint32_t valor)
+{
+#if ESP_ARDUINO_VERSION_MAJOR >= 3
+  ledcWrite(pin, valor);
+#else
+  ledcWrite(canal, valor);
+#endif
+}
 void establecerColorRGB(uint8_t r, uint8_t g, uint8_t b)
 {
-  ledcWrite(CANAL_PWM_ROJO,  BRILLO_MAXIMO - r);
-  ledcWrite(CANAL_PWM_VERDE, BRILLO_MAXIMO - g);
-  ledcWrite(CANAL_PWM_AZUL,  BRILLO_MAXIMO - b);
+  escribirPWMLed(PIN_LED_ROJO,  CANAL_PWM_ROJO,  BRILLO_MAXIMO - r);
+  escribirPWMLed(PIN_LED_VERDE, CANAL_PWM_VERDE, BRILLO_MAXIMO - g);
+  escribirPWMLed(PIN_LED_AZUL,  CANAL_PWM_AZUL,  BRILLO_MAXIMO - b);
 }
 
 void actualizarBuzzer(bool activo)
@@ -302,14 +320,9 @@ void setup()
     pinMode(PIN_BUZZER, OUTPUT);
     pinMode(PIN_RELE, OUTPUT);
 
-    ledcSetup(CANAL_PWM_ROJO, FRECUENCIA_PWM, RESOLUCION_PWM);
-    ledcAttachPin(PIN_LED_ROJO, CANAL_PWM_ROJO);
-
-    ledcSetup(CANAL_PWM_VERDE, FRECUENCIA_PWM, RESOLUCION_PWM);
-    ledcAttachPin(PIN_LED_VERDE, CANAL_PWM_VERDE);
-
-    ledcSetup(CANAL_PWM_AZUL, FRECUENCIA_PWM, RESOLUCION_PWM);
-    ledcAttachPin(PIN_LED_AZUL, CANAL_PWM_AZUL);
+    inicializarPWMLed(PIN_LED_ROJO, CANAL_PWM_ROJO);
+    inicializarPWMLed(PIN_LED_VERDE, CANAL_PWM_VERDE);
+    inicializarPWMLed(PIN_LED_AZUL, CANAL_PWM_AZUL);
 
     // SENSOR DE TEMPERATURA
     sensor_temperatura.begin();
