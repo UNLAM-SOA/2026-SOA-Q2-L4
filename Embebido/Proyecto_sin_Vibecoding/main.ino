@@ -18,6 +18,10 @@
 #define INDICE_SENSOR_TEMPERATURA 0  //tenemos un solo sensor el cual esta en la posicion 0 del indice del DS18B20
 #define TIEMPO_CONVERSION_TEMP_MS 750 //tiempo que tarda el DS18B20, el valor se obtuvo haciendo pruebas en wokwi y viendo cuanto tarda
 #define DELAY_TAREAS 200
+#define MAX_EVENTS_QUEUE 6
+#define TIME_OUT 2000
+#define DELAY_1000_MS 1000
+
 
 //manejar el brillo con PWM
 #define FRECUENCIA_PWM           5000
@@ -30,7 +34,9 @@
 
 // TEMPORIZACION
 #define INTERVALO_LECTURA_MS     1000 //1 segundo
+/*------------------------ FIN INCLUDES Y DEFINE ------------------------*/
 
+/*------------------------ INICIO DECLARACION VARIABLES GLOBALES ------------------------*/
 
 //objetos para leer la temperatura
 OneWire oneWire(PIN_SENSOR_TEMPERATURA);
@@ -40,7 +46,8 @@ DallasTemperature sensor_temperatura(&oneWire);
 unsigned long tiempo_solicitud_temperatura = 0;
 bool medicion_temperatura_en_curso = false;
 
-/*------------------------ FIN INCLUDES Y DEFINE ------------------------*/
+QueueHandle_t eventQueue;
+/*------------------------ FIN DECLARACION VARIABLES GLOBALES ------------------------*/
 
 
 /*------------------------ INICIO FSM ------------------------*/
@@ -126,6 +133,54 @@ transition state_table[MAX_STATES][MAX_EVENTS] =
 };
 
 
+/*------------------------ BEGIN ESP32 ------------------------*/
+void setup() 
+{
+    Serial.begin(VELOCIDAD_SERIAL);
+    Serial.println("Smart Insulin Guardian System");
+
+    // INPUTS
+    pinMode(PIN_SENSOR_MAGNETICO, INPUT_PULLUP);
+    pinMode(PIN_SENSOR_LUZ, INPUT);
+
+    // SENSOR DE TEMPERATURA
+    sensor_temperatura.begin();
+    sensor_temperatura.setWaitForConversion(false); //evita que la ESP32 se bloquee mientras el DS18B20 realiza la medicion
+
+    eventQueue = xQueueCreate(MAX_EVENTS_QUEUE,sizeof(events));
+    xTaskCreate(leer_sensor_magnetico,"sensor temperatura",1024*4,NULL,1,NULL);
+    xTaskCreate(leer_sensor_luz,"sensor luminico",1024*4,NULL,1,NULL);
+    xTaskCreate(leer_sensor_temperatura,"sensor temperatura",1024*4,NULL,1,NULL);
+
+    ir_init();
+
+}
+
+void loop() 
+{
+    state_machine();
+}
+
+void state_machine()
+{
+    get_event();
+    state_table[current_state][new_event];
+}
+
+void get_event()
+{
+    events incoming_event;
+    if(xQueueReceive(eventQueue,&incoming_event,portMAX_DELAY) == pdPASS)
+    {
+      new_event = incoming_event;
+      Serial.print("Nuevo evento recibido: ");
+      Serial.println(s_events[new_event]);
+    }
+}
+
+/*------------------------ END ESP32 ------------------------*/
+
+
 
 // ---------- INICIO FUNCIONES DE TRANSICION ---------- //
 void ir_init()
@@ -177,107 +232,67 @@ void a_completo()
 {
     current_state = ST_TEMP_ELEVADA_Y_LUZ_DETECTADA_Y_PUERTA_ABIERTA;
 }
+// ---------- FIN FUNCIONES DE TRANSICION ---------- //
 
-
-/*------------------------ FUNCIONES DE LECTURA DE SENSORES ------------------------*/
-bool leer_sensor_magnetico()
+/*------------------------ INICIO FUNCIONES DE LECTURA DE SENSORES ------------------------*/
+void leer_sensor_magnetico(void* p)
 {
-    //return digitalRead(PIN_SENSOR_MAGNETICO) == HIGH; //retorna true si la puerta está abierta (HIGH) y false si está cerrada (LOW)
-    int value = digitalRead(PIN_SENSOR_MAGNETICO);
-
-    if(value == LOW)
-    {
-        new_event = EV_PUERTA_ABIERTA;
-        return true;
-    }
-    else
-    {
-        new_event = EV_PUERTA_CERRADA;
-        return true;
-    }
-
-    return false;
-
+   int value;
+   events event;
+   while(1)
+   {
+      value = digitalRead(PIN_SENSOR_MAGNETICO);
+      if(value == LOW)
+      {
+        event = EV_PUERTA_ABIERTA;
+      }
+      else
+      {
+        event = EV_PUERTA_CERRADA;
+      }
+      xQueueSend(eventQueue,&event,TIME_OUT);
+      vTaskDelay(DELAY_1000_MS);
+   }
 }
 
-bool leer_sensor_luz()
+void leer_sensor_luz(void* p)
 {
-    int value = analogRead(PIN_SENSOR_LUZ);
-    
-    if(value <= UMBRAL_LUZ_DETECTADA)
+    int value;
+    events event;
+    while(1)
     {
-        new_event = EV_LUZ_DETECTADA;
-        return true;
-    }
-
-    return false;
-}
-
-bool leer_sensor_temperatura()
-{
-    float value = sensor_temperatura.getTempCByIndex(INDICE_SENSOR_TEMPERATURA); 
-    
-    if(value >= UMBRAL_TEMP_MAX)
-    {
-        new_event = EV_TEMP_ELEVADA;
-        return true;
-    }
-    if(value <= UMBRAL_TEMP_MIN)
-    {
-        new_event = EV_TEMP_NORMAL;
-        return true;
-    }
-
-    return false;
-}
-
-
-void get_event (void *pvParameter)
-{
-    while (1)
-    {
-        if(leer_sensor_magnetico() == true || leer_sensor_luz() == true || leer_sensor_temperatura() == true)
+        value = analogRead(PIN_SENSOR_LUZ);
+        if(value <= UMBRAL_LUZ_DETECTADA)
         {
-            vTaskDelay(DELAY_TAREAS);
+            event = EV_LUZ_DETECTADA;
         }
+        else
+        {
+            event = EV_SIN_LUZ_DETECTADA;
+        }
+        xQueueSend(eventQueue,&event,TIME_OUT);
+        vTaskDelay(DELAY_1000_MS);
     }
-    
 }
 
-void task_loop (void *pvParameter)
+void leer_sensor_temperatura(void* p)
 {
-     while(1)
-     {
-            if ((new_event >= 0) && (new_event < MAX_EVENTS) && (current_state >= 0) && (current_state < MAX_STATES))
-            {
-                state_table[current_state][new_event]();
-            }
-     }
+    float value;
+    events event;
+    while(1)
+    {
+        value = sensor_temperatura.getTempCByIndex(INDICE_SENSOR_TEMPERATURA);
+        if(value >= UMBRAL_TEMP_MAX)
+        {
+            event = EV_TEMP_ELEVADA;
+        }
+        else if(value <= UMBRAL_TEMP_MIN)
+        {
+            event = EV_TEMP_NORMAL;
+        }
+        xQueueSend(eventQueue,&event,TIME_OUT);
+        vTaskDelay(DELAY_1000_MS);
+    }
 }
 
-/*------------------------ SET UP ------------------------*/
-void setup() {
-  Serial.begin(VELOCIDAD_SERIAL);
-
-    // INPUTS
-    pinMode(PIN_SENSOR_MAGNETICO, INPUT_PULLUP);
-    pinMode(PIN_SENSOR_LUZ, INPUT);
-
-    // SENSOR DE TEMPERATURA
-    sensor_temperatura.begin();
-    sensor_temperatura.setWaitForConversion(false); //evita que la ESP32 se bloquee mientras el DS18B20 realiza la medicion
-
-    xTaskCreate(get_event,"taskGetEvent",1024*4,NULL,1,NULL);
-    xTaskCreate(task_loop)
-
-    ir_init();
-
-
-
-
-}
-
-void loop() {
-  // put your main code here, to run repeatedly:
-
-}
+/*------------------------ FIN FUNCIONES DE LECTURA DE SENSORES ------------------------*/
