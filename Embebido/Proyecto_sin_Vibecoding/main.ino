@@ -217,17 +217,32 @@ void leer_sensor_temperatura(void* p)
     events event;
     while(1)
     {
-        value = sensor_temperatura.getTempCByIndex(INDICE_SENSOR_TEMPERATURA);
-        if(value >= UMBRAL_TEMP_MAX)
+        if (!medicion_temperatura_en_curso)
         {
-            event = EV_TEMP_ELEVADA;
+            sensor_temperatura.requestTemperatures();
+            tiempo_solicitud_temperatura = millis();
+            medicion_temperatura_en_curso = true;
         }
-        else if(value <= UMBRAL_TEMP_MIN)
+        else if (millis() - tiempo_solicitud_temperatura >= TIEMPO_CONVERSION_TEMP_MS)
         {
-            event = EV_TEMP_NORMAL;
+            value = sensor_temperatura.getTempCByIndex(INDICE_SENSOR_TEMPERATURA);
+            medicion_temperatura_en_curso = false;
+
+            if (value >= UMBRAL_TEMP_MAX)
+            {
+                event = EV_TEMP_ELEVADA;
+                xQueueSend(eventQueue, &event, TIME_OUT);
+            }
+            else if (value <= UMBRAL_TEMP_MIN)
+            {
+                event = EV_TEMP_NORMAL;
+                xQueueSend(eventQueue, &event, TIME_OUT);
+            }
+            // Entre UMBRAL_TEMP_MIN y UMBRAL_TEMP_MAX es zona de histéresis:
+            // no se envía evento, el sistema se queda en el estado que ya tenía.
         }
-        xQueueSend(eventQueue,&event,TIME_OUT);
-        vTaskDelay(DELAY_1000_MS);
+
+        vTaskDelay(DELAY_TAREAS);
     }
 }
 
