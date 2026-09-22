@@ -395,7 +395,7 @@ void setup()
     sensor_temperatura.setWaitForConversion(false); //evita que la ESP32 se bloquee mientras el DS18B20 realiza la medicion
 
     eventQueue = xQueueCreate(MAX_EVENTS_QUEUE,sizeof(events));
-    xTaskCreate(leer_sensor_magnetico,"sensor temperatura",1024*4,NULL,1,NULL);
+    xTaskCreate(leer_sensor_magnetico,"sensor magnetico",1024*4,NULL,1,NULL);
     xTaskCreate(leer_sensor_luz,"sensor luminico",1024*4,NULL,1,NULL);
     xTaskCreate(leer_sensor_temperatura,"sensor temperatura",1024*4,NULL,1,NULL);
 
