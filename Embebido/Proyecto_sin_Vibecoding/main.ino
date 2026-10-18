@@ -4,6 +4,10 @@
 #include <OneWire.h>
 #include <DallasTemperature.h>
 
+//librerias para la comunicacion MQTT
+#include <WiFi.h>
+#include <PubSubClient.h>
+
 #define PIN_SENSOR_MAGNETICO     27
 #define PIN_SENSOR_LUZ           34
 #define PIN_SENSOR_TEMPERATURA   4
@@ -20,9 +24,14 @@
 #define DELAY_TAREAS 200
 #define MAX_EVENTS_QUEUE 6
 #define TIME_OUT 2000
+#define TIEMPO_SIN_ESPERA 0
 #define DELAY_1000_MS 1000
 #define FRECUENCIA_BUZZER_HZ 1000
 #define CANTIDAD_SENSORES_TEMPERATURA 1
+#define INTERVALO_PUBLICACION_MQTT_MS 10000 //intervalo para publicar via mqtt
+#define INTERVALO_REINTENTO_MQTT_MS   10000
+#define DELAY_TAREA_MQTT_MS           10
+#define MQTT_RETENER_MENSAJE          true //el broker guarda el ultimo estado para quien se suscriba despues
 
 
 //manejar el brillo con PWM
@@ -58,12 +67,43 @@ unsigned long tiempo_solicitud_temperatura = 0;
 bool medicion_temperatura_en_curso = false;
 
 QueueHandle_t eventQueue;
+
+//variables compartidas entre la tarea del sensor y la tarea MQTT
+volatile float ultima_temperatura = 0.0;
+volatile bool temperatura_disponible = false;
+
+//indica a la tarea MQTT que hay un estado nuevo para publicar (se publica el inicial apenas conecta)
+volatile bool estado_pendiente_publicar = true;
+
 /*------------------------ FIN DECLARACION VARIABLES GLOBALES ------------------------*/
+
+/*------------------------ INICIO DECLARACION VARIABLES PARA LA COMUNICACION MQTT ------------------------*/
+// WIFI WOKWI
+const char* WIFI_SSID = "Wokwi-GUEST";
+const char* WIFI_PASSWORD = "";
+
+// MQTT
+const char* MQTT_SERVER = "broker.emqx.io";
+const int MQTT_PORT = 1883;
+
+// Topics: el ESP32 publica en temperatura y estado, y recibe en comando
+const char* TOPIC_TEMPERATURA = "/unlam/insulin_guardian/L4/temperatura";
+const char* TOPIC_ESTADO      = "/unlam/insulin_guardian/L4/estado";
+const char* TOPIC_COMANDO     = "/unlam/insulin_guardian/L4/comando";
+
+// Comandos aceptados en TOPIC_COMANDO
+const char* COMANDO_SILENCIAR = "SILENCIAR";
+const char* COMANDO_REACTIVAR = "REACTIVAR";
+
+WiFiClient wifiClient;
+PubSubClient mqttClient(wifiClient);
+
+/*------------------------ FIN DECLARACION VARIABLES PARA COMUNICACION MQTT------------------------*/
 
 
 /*------------------------ INICIO FSM ------------------------*/
 #define MAX_STATES 10
-#define MAX_EVENTS 6
+#define MAX_EVENTS 8
 
 enum states {
               ST_INIT,
@@ -98,7 +138,9 @@ enum events {
               EV_TEMP_ELEVADA,
               EV_TEMP_NORMAL,
               EV_PUERTA_ABIERTA,
-              EV_PUERTA_CERRADA
+              EV_PUERTA_CERRADA,
+              EV_CMD_SILENCIAR,
+              EV_CMD_REACTIVAR
             } new_event;
 
 String s_events [] = {
@@ -107,7 +149,9 @@ String s_events [] = {
               "EV_TEMP_ELEVADA",
               "EV_TEMP_NORMAL",
               "EV_PUERTA_ABIERTA",
-              "EV_PUERTA_CERRADA"
+              "EV_PUERTA_CERRADA",
+              "EV_CMD_SILENCIAR",
+              "EV_CMD_REACTIVAR"
             };
 
 
@@ -123,6 +167,8 @@ void a_luztemp();
 void a_luzpuerta();
 void a_temppuerta();
 void a_completo();
+void a_silenciar();
+void a_reactivar();
 /*------------------------ FIN DECLARACION FUNCIONES FSM ------------------------*/
 
 
@@ -131,17 +177,17 @@ typedef void (*transition)();
 
 transition state_table[MAX_STATES][MAX_EVENTS] =
 {
-  //                                                      EV_SIN_LUZ_DETECTADA  EV_LUZ_DETECTADA  EV_TEMP_ELEVADA  EV_TEMP_NORMAL  EV_PUERTA_ABIERTA  EV_PUERTA_CERRADA
-  /* ST_INIT */                                          { none,                 none,             none,            none,           none,              none },
-  /* ST_ERROR */                                         { none,                 none,             none,            none,           none,              none },
-  /* ST_SEGURO */                                        { none,                 a_luz,            a_temp,          none,           a_puerta,          none },
-  /* ST_PUERTA_ABIERTA */                                { none,                 a_luzpuerta,      a_temppuerta,    none,           none,              a_seguro },
-  /* ST_LUZ_DETECTADA */                                 { a_seguro,             none,             a_luztemp,       none,           a_luzpuerta,       none },
-  /* ST_TEMP_ELEVADA */                                  { none,                 a_luztemp,        none,            a_seguro,       a_temppuerta,      none },
-  /* ST_TEMP_ELEVADA_Y_LUZ_DETECTADA */                  { a_temp,               none,             none,            a_luz,          a_completo,        none },
-  /* ST_TEMP_ELEVADA_Y_PUERTA_ABIERTA */                 { none,                 a_completo,       none,            a_puerta,       none,              a_temp },
-  /* ST_TEMP_ELEVADA_Y_LUZ_DETECTADA_Y_PUERTA_ABIERTA */ { a_temppuerta,         none,             none,            a_luzpuerta,    none,              a_luztemp },
-  /* ST_LUZ_DETECTADA_Y_PUERTA_ABIERTA */                { a_puerta,             none,             a_completo,      none,           none,              a_luz }
+  //                                                      EV_SIN_LUZ_DETECTADA  EV_LUZ_DETECTADA  EV_TEMP_ELEVADA  EV_TEMP_NORMAL  EV_PUERTA_ABIERTA  EV_PUERTA_CERRADA  EV_CMD_SILENCIAR  EV_CMD_REACTIVAR
+  /* ST_INIT */                                          { none,                 none,             none,            none,           none,              none,              none,             none },
+  /* ST_ERROR */                                         { none,                 none,             none,            none,           none,              none,              none,             none },
+  /* ST_SEGURO */                                        { none,                 a_luz,            a_temp,          none,           a_puerta,          none,              none,             none },
+  /* ST_PUERTA_ABIERTA */                                { none,                 a_luzpuerta,      a_temppuerta,    none,           none,              a_seguro,          a_silenciar,      a_reactivar },
+  /* ST_LUZ_DETECTADA */                                 { a_seguro,             none,             a_luztemp,       none,           a_luzpuerta,       none,              a_silenciar,      a_reactivar },
+  /* ST_TEMP_ELEVADA */                                  { none,                 a_luztemp,        none,            a_seguro,       a_temppuerta,      none,              a_silenciar,      a_reactivar },
+  /* ST_TEMP_ELEVADA_Y_LUZ_DETECTADA */                  { a_temp,               none,             none,            a_luz,          a_completo,        none,              a_silenciar,      a_reactivar },
+  /* ST_TEMP_ELEVADA_Y_PUERTA_ABIERTA */                 { none,                 a_completo,       none,            a_puerta,       none,              a_temp,            a_silenciar,      a_reactivar },
+  /* ST_TEMP_ELEVADA_Y_LUZ_DETECTADA_Y_PUERTA_ABIERTA */ { a_temppuerta,         none,             none,            a_luzpuerta,    none,              a_luztemp,         a_silenciar,      a_reactivar },
+  /* ST_LUZ_DETECTADA_Y_PUERTA_ABIERTA */                { a_puerta,             none,             a_completo,      none,           none,              a_luz,             a_silenciar,      a_reactivar }
 };
 
 void get_event()
@@ -168,6 +214,8 @@ void state_machine()
     if (current_state != estado_anterior) {
         Serial.print("Cambio de estado: ");
         Serial.println(s_states[current_state]);
+
+        estado_pendiente_publicar = true;
     }
 }
 
@@ -262,6 +310,8 @@ void leer_sensor_temperatura(void* p)
         else if(millis() - tiempo_solicitud_temperatura >= TIEMPO_CONVERSION_TEMP_MS)
         {
             value = sensor_temperatura.getTempCByIndex(INDICE_SENSOR_TEMPERATURA);
+            ultima_temperatura = value; //para comunicarlo mediante MQTT
+            temperatura_disponible = true;
 
             medicion_temperatura_en_curso = false;
             hay_evento = false;
@@ -331,12 +381,160 @@ bool comprobar_sensor_temperatura()
     return sensor_temperatura.getDeviceCount() >= CANTIDAD_SENSORES_TEMPERATURA;
 }
 
+/* Inicia la conexion a la red WiFi. No bloquea: la conexion
+  se completa en segundo plano y la verifica tarea_mqtt. */
+void iniciar_wifi()
+{
+    Serial.println("Iniciando conexion WiFi...");
+    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+}
+
+/* Intenta conectar al broker MQTT con un clientId aleatorio y,
+  si lo logra, se suscribe al topic de comandos. */
+void conectar_mqtt()
+{
+    Serial.print("Conectando a MQTT...");
+
+    String clientId = "InsulinGuardian-";
+    clientId += String(random(0xffff), HEX);
+
+    if(mqttClient.connect(clientId.c_str()))
+    {
+        Serial.println(" conectado");
+
+        mqttClient.subscribe(TOPIC_COMANDO);
+
+        Serial.print("Suscripto a: ");
+        Serial.println(TOPIC_COMANDO);
+    }
+    else
+    {
+        Serial.print(" error=");
+        Serial.println(mqttClient.state());
+    }
+}
+
+void tarea_mqtt(void* p)
+{
+    unsigned long ultima_publicacion = 0;
+    unsigned long ultimo_intento_mqtt = 0;
+    bool wifi_conectado_anunciado = false;
+
+    while(1)
+    {
+        // Si todavia no hay WiFi, esperamos sin bloquear las otras tareas
+        if(WiFi.status() != WL_CONNECTED)
+        {
+            wifi_conectado_anunciado = false;
+        }
+        else
+        {
+            // Mostrar una sola vez cuando se conecta
+            if(!wifi_conectado_anunciado)
+            {
+                Serial.println("WiFi conectado");
+                Serial.print("IP: ");
+                Serial.println(WiFi.localIP());
+
+                wifi_conectado_anunciado = true;
+            }
+
+            // Intentar conexion MQTT cada cierto tiempo
+            if(!mqttClient.connected())
+            {
+                if(millis() - ultimo_intento_mqtt >= INTERVALO_REINTENTO_MQTT_MS)
+                {
+                    conectar_mqtt();
+
+                    ultimo_intento_mqtt = millis();
+                }
+            }
+            else
+            {
+                mqttClient.loop();
+
+                // Publicar el estado de la FSM cuando cambia
+                if(estado_pendiente_publicar)
+                {
+                    estado_pendiente_publicar = false;
+
+                    mqttClient.publish(TOPIC_ESTADO, s_states[current_state].c_str(), MQTT_RETENER_MENSAJE);
+
+                    Serial.print("Estado enviado por MQTT: ");
+                    Serial.println(s_states[current_state]);
+                }
+
+                // Publicar temperatura cada cierto tiempo
+                if( temperatura_disponible && millis() - ultima_publicacion >= INTERVALO_PUBLICACION_MQTT_MS)
+                {
+                    char mensaje[16];
+
+                    dtostrf(ultima_temperatura, 1, 2,mensaje);
+
+                    mqttClient.publish(TOPIC_TEMPERATURA, mensaje);
+
+                    Serial.print("Temperatura enviada por MQTT: ");
+                    Serial.println(mensaje);
+
+                    ultima_publicacion = millis();
+                }
+            }
+        }
+
+        vTaskDelay(pdMS_TO_TICKS(DELAY_TAREA_MQTT_MS));
+    }
+}
+
+void recibir_mensaje_mqtt(char* topic, byte* payload, unsigned int length)
+{
+    String mensaje = "";
+    events evento;
+
+    for(unsigned int i = 0; i < length; i++)
+    {
+        mensaje += (char)payload[i];
+    }
+    mensaje.trim();
+
+    Serial.print("Mensaje MQTT recibido en ");
+    Serial.print(topic);
+    Serial.print(": ");
+    Serial.println(mensaje);
+
+    if(String(topic) != TOPIC_COMANDO)
+    {
+        return;
+    }
+
+    if(mensaje == COMANDO_SILENCIAR)
+    {
+        evento = EV_CMD_SILENCIAR;
+    }
+    else if(mensaje == COMANDO_REACTIVAR)
+    {
+        evento = EV_CMD_REACTIVAR;
+    }
+    else
+    {
+        Serial.println("Comando MQTT desconocido");
+        return;
+    }
+
+    // Sin espera: este callback corre dentro de tarea_mqtt y no debe bloquearla
+    xQueueSend(eventQueue, &evento, TIEMPO_SIN_ESPERA);
+}
+
 
 /*------------------------ BEGIN ESP32 ------------------------*/
 void setup() 
 {
     Serial.begin(VELOCIDAD_SERIAL);
     Serial.println("Smart Insulin Guardian System");
+
+    iniciar_wifi();
+    mqttClient.setServer(MQTT_SERVER,MQTT_PORT);
+
+    mqttClient.setCallback(recibir_mensaje_mqtt);
 
     // INPUTS
     pinMode(PIN_SENSOR_MAGNETICO, INPUT_PULLUP);
@@ -353,12 +551,22 @@ void setup()
 
     // SENSOR DE TEMPERATURA
     sensor_temperatura.begin();
-    sensor_temperatura.setWaitForConversion(false); 
+    sensor_temperatura.setWaitForConversion(false);
 
-    eventQueue = xQueueCreate(MAX_EVENTS_QUEUE,sizeof(events));
-    xTaskCreate(leer_sensor_magnetico,"sensor temperatura",1024*4,NULL,1,NULL);
-    xTaskCreate(leer_sensor_luz,"sensor luminico",1024*4,NULL,1,NULL);
-    xTaskCreate(leer_sensor_temperatura,"sensor temperatura",1024*4,NULL,1,NULL);
+    // ESTADO INICIAL
+    ir_init();
+
+    // COMPROBACION DEL SENSOR AL INICIAR
+    if(comprobar_sensor_temperatura())
+    {
+        Serial.println("Sensor de temperatura detectado correctamente");
+
+        eventQueue = xQueueCreate(MAX_EVENTS_QUEUE, sizeof(events));
+
+        xTaskCreate(leer_sensor_magnetico, "sensor magnetico", 1024*4, NULL, 1, NULL);
+        xTaskCreate(leer_sensor_luz, "sensor luminico", 1024*4, NULL, 1, NULL);
+        xTaskCreate(leer_sensor_temperatura, "sensor temperatura", 1024*4, NULL, 1, NULL);
+        xTaskCreate(tarea_mqtt,"MQTT",4096,NULL,1,NULL);
 
         a_seguro();
     }
@@ -485,5 +693,19 @@ void a_completo()
     establecerColorRGB(BRILLO_MAXIMO, BRILLO_APAGADO, BRILLO_MAXIMO);
     tone(PIN_BUZZER, FRECUENCIA_BUZZER_HZ);
     digitalWrite(PIN_RELE, HIGH);
+}
+
+/* Comando silenciar (solo estados de alarma): apaga el buzzer y
+  mantiene el estado, el LED y la ventilacion. */
+void a_silenciar()
+{
+    noTone(PIN_BUZZER);
+}
+
+/* Comando reactivar (solo estados de alarma): vuelve a encender
+  el buzzer y mantiene el estado, el LED y la ventilacion. */
+void a_reactivar()
+{
+    tone(PIN_BUZZER, FRECUENCIA_BUZZER_HZ);
 }
 // ---------- FIN FUNCIONES DE TRANSICION ---------- //
