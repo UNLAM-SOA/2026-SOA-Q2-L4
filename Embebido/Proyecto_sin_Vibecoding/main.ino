@@ -4,7 +4,7 @@
 #include <OneWire.h>
 #include <DallasTemperature.h>
 
-//librerias para la comunicacion MQTT
+//librerias para la comunicacion MQTT (instalar PubSubClient desde library manager)
 #include <WiFi.h>
 #include <PubSubClient.h>
 
@@ -18,7 +18,7 @@
 #define PIN_RELE                 19
 
 // CONFIGURACIONES
-#define VELOCIDAD_SERIAL         115200 //inicia y configura comunicacion entre EPS32 y ARDUINO_IDE
+#define VELOCIDAD_SERIAL         115200 //inicia y configura comunicacion entre ESP32 y ARDUINO_IDE
 #define INDICE_SENSOR_TEMPERATURA 0  //tenemos un solo sensor el cual esta en la posicion 0 del indice del DS18B20
 #define TIEMPO_CONVERSION_TEMP_MS 750 //tiempo que tarda el DS18B20, el valor se obtuvo haciendo pruebas en wokwi y viendo cuanto tarda
 #define DELAY_TAREAS 200
@@ -32,6 +32,15 @@
 #define INTERVALO_REINTENTO_MQTT_MS   10000
 #define DELAY_TAREA_MQTT_MS           10
 #define MQTT_RETENER_MENSAJE          true //el broker guarda el ultimo estado para quien se suscriba despues
+#define RANGO_ID_CLIENTE_MQTT         0xffff
+#define TAMANIO_BUFFER_MENSAJE        16
+#define ANCHO_MINIMO_TEMPERATURA      1
+#define DECIMALES_TEMPERATURA         2
+
+// TAREAS FREERTOS
+#define TAMANIO_STACK_SENSORES        (1024 * 4)
+#define TAMANIO_STACK_MQTT            4096
+#define PRIORIDAD_TAREAS              1
 
 
 //manejar el brillo con PWM
@@ -52,8 +61,6 @@
 #define UMBRAL_TEMP_MAX          8    //la insulina no debe superar los 8 grados
 #define UMBRAL_LUZ_DETECTADA     2000 // segun LDR en wokwi 4063= cerrado (poca luz); 32=abierto (mucha luz), definimos un valor intermedio
 
-// TEMPORIZACION
-#define INTERVALO_LECTURA_MS     1000 //1 segundo
 /*------------------------ FIN INCLUDES Y DEFINE ------------------------*/
 
 /*------------------------ INICIO DECLARACION VARIABLES GLOBALES ------------------------*/
@@ -190,6 +197,7 @@ transition state_table[MAX_STATES][MAX_EVENTS] =
   /* ST_LUZ_DETECTADA_Y_PUERTA_ABIERTA */                { a_puerta,             none,             a_completo,      none,           none,              a_luz,             a_silenciar,      a_reactivar }
 };
 
+/* Espera un evento de la cola (bloqueante) y lo guarda en new_event. */
 void get_event()
 {
     events incoming_event;
@@ -201,6 +209,8 @@ void get_event()
     }
 }
 
+/* Procesa un evento: ejecuta la transicion de la tabla, informa el cambio
+  de estado por terminal y avisa a la tarea MQTT que hay un estado nuevo. */
 void state_machine()
 {
     get_event();
@@ -221,6 +231,8 @@ void state_machine()
 
 
 /*------------------------ INICIO FUNCIONES DE LECTURA DE SENSORES ------------------------*/
+/* Tarea FreeRTOS: lee el sensor magnetico cada segundo y encola un
+  evento de puerta abierta o cerrada cuando cambia su estado. */
 void leer_sensor_magnetico(void* p)
 {
     int value;
@@ -255,6 +267,8 @@ void leer_sensor_magnetico(void* p)
 }
 
 
+/* Tarea FreeRTOS: lee el sensor de luz cada segundo y encola un evento
+  cuando el valor cruza el umbral de luz detectada. */
 void leer_sensor_luz(void* p)
 {
     int value;
@@ -289,6 +303,9 @@ void leer_sensor_luz(void* p)
 }
 
 
+/* Tarea FreeRTOS: mide la temperatura con el DS18B20 sin bloquear (pide la
+  conversion y lee cuando paso el tiempo de conversion), guarda el valor
+  para MQTT y encola un evento al cruzar los umbrales. */
 void leer_sensor_temperatura(void* p)
 {
     float value;
@@ -344,6 +361,8 @@ void leer_sensor_temperatura(void* p)
 /*------------------------ FIN FUNCIONES DE LECTURA DE SENSORES ------------------------*/
 
 /*------------------------------- FUNCIONES DE ACTUADORES ------------------------------*/
+/* Configura un pin como salida PWM para un canal del LED RGB.
+  Usa la API de LEDC segun la version del core de ESP32. */
 void inicializarPWMLed(uint8_t pin, uint8_t canal)
 {
 #if ESP_ARDUINO_VERSION_MAJOR >= 3
@@ -354,6 +373,7 @@ void inicializarPWMLed(uint8_t pin, uint8_t canal)
 #endif
 }
 
+/* Escribe un valor de brillo en el canal PWM de un color del LED RGB. */
 void escribirPWMLed(uint8_t pin, uint8_t canal, uint32_t valor)
 {
 #if ESP_ARDUINO_VERSION_MAJOR >= 3
@@ -362,6 +382,7 @@ void escribirPWMLed(uint8_t pin, uint8_t canal, uint32_t valor)
   ledcWrite(canal, valor);
 #endif
 }
+/* Establece el color del LED RGB con el brillo de cada canal (0 a BRILLO_MAXIMO). */
 void establecerColorRGB(uint8_t r, uint8_t g, uint8_t b)
 {
   escribirPWMLed(PIN_LED_ROJO,  CANAL_PWM_ROJO,  r);
@@ -396,7 +417,7 @@ void conectar_mqtt()
     Serial.print("Conectando a MQTT...");
 
     String clientId = "InsulinGuardian-";
-    clientId += String(random(0xffff), HEX);
+    clientId += String(random(RANGO_ID_CLIENTE_MQTT), HEX);
 
     if(mqttClient.connect(clientId.c_str()))
     {
@@ -414,6 +435,10 @@ void conectar_mqtt()
     }
 }
 
+/* Tarea FreeRTOS de comunicacion. Es la unica que usa mqttClient (la
+  libreria no es thread-safe). Mantiene la conexion WiFi/MQTT, recibe
+  comandos, publica la temperatura periodicamente y publica el estado
+  de la FSM cada vez que cambia. */
 void tarea_mqtt(void* p)
 {
     unsigned long ultima_publicacion = 0;
@@ -467,9 +492,9 @@ void tarea_mqtt(void* p)
                 // Publicar temperatura cada cierto tiempo
                 if( temperatura_disponible && millis() - ultima_publicacion >= INTERVALO_PUBLICACION_MQTT_MS)
                 {
-                    char mensaje[16];
+                    char mensaje[TAMANIO_BUFFER_MENSAJE];
 
-                    dtostrf(ultima_temperatura, 1, 2,mensaje);
+                    dtostrf(ultima_temperatura, ANCHO_MINIMO_TEMPERATURA, DECIMALES_TEMPERATURA, mensaje);
 
                     mqttClient.publish(TOPIC_TEMPERATURA, mensaje);
 
@@ -485,6 +510,9 @@ void tarea_mqtt(void* p)
     }
 }
 
+/* Callback de PubSubClient al recibir un mensaje. No actua sobre los
+  actuadores: traduce el comando a un evento y lo encola para que lo
+  procese la FSM, que ejecuta la accion en la funcion de transicion. */
 void recibir_mensaje_mqtt(char* topic, byte* payload, unsigned int length)
 {
     String mensaje = "";
@@ -563,10 +591,10 @@ void setup()
 
         eventQueue = xQueueCreate(MAX_EVENTS_QUEUE, sizeof(events));
 
-        xTaskCreate(leer_sensor_magnetico, "sensor magnetico", 1024*4, NULL, 1, NULL);
-        xTaskCreate(leer_sensor_luz, "sensor luminico", 1024*4, NULL, 1, NULL);
-        xTaskCreate(leer_sensor_temperatura, "sensor temperatura", 1024*4, NULL, 1, NULL);
-        xTaskCreate(tarea_mqtt,"MQTT",4096,NULL,1,NULL);
+        xTaskCreate(leer_sensor_magnetico, "sensor magnetico", TAMANIO_STACK_SENSORES, NULL, PRIORIDAD_TAREAS, NULL);
+        xTaskCreate(leer_sensor_luz, "sensor luminico", TAMANIO_STACK_SENSORES, NULL, PRIORIDAD_TAREAS, NULL);
+        xTaskCreate(leer_sensor_temperatura, "sensor temperatura", TAMANIO_STACK_SENSORES, NULL, PRIORIDAD_TAREAS, NULL);
+        xTaskCreate(tarea_mqtt, "MQTT", TAMANIO_STACK_MQTT, NULL, PRIORIDAD_TAREAS, NULL);
 
         a_seguro();
     }
@@ -618,6 +646,7 @@ void a_error()
     digitalWrite(PIN_RELE, LOW);
 }
 
+/* Evento sin efecto en el estado actual: no se realiza ninguna accion. */
 void none()
 {
     // No se realiza cambio de estado
