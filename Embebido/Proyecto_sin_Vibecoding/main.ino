@@ -6,7 +6,7 @@
 
 #define PIN_SENSOR_MAGNETICO     27
 #define PIN_SENSOR_LUZ           34
-#define PIN_SENSOR_TEMPERATURA   2
+#define PIN_SENSOR_TEMPERATURA   4
 #define PIN_LED_ROJO             25
 #define PIN_LED_VERDE            26
 #define PIN_LED_AZUL             33
@@ -22,6 +22,7 @@
 #define TIME_OUT 2000
 #define DELAY_1000_MS 1000
 #define FRECUENCIA_BUZZER_HZ 1000
+#define CANTIDAD_SENSORES_TEMPERATURA 1
 
 
 //manejar el brillo con PWM
@@ -31,7 +32,6 @@
 //calcular el brillo maximo con la resolucion de PWM
 #define BRILLO_MAXIMO ((1 << RESOLUCION_PWM) - 1)  // 255 con RESOLUCION_PWM=8
 #define BRILLO_APAGADO 0
-#define PERIODO_BEEP_MS 300
 
 //manejar canales de cada color del led RGB
 #define CANAL_PWM_ROJO  0
@@ -113,6 +113,7 @@ String s_events [] = {
 
 /*------------------------ DECLARACION FUNCIONES FSM ------------------------*/
 void ir_init(); //lo usamos como inicializador de la fsm
+void a_error();
 void none();
 void a_seguro();
 void a_luz();
@@ -318,64 +319,22 @@ void establecerColorRGB(uint8_t r, uint8_t g, uint8_t b)
   escribirPWMLed(PIN_LED_AZUL,  CANAL_PWM_AZUL,  b);
 }
 
-void actualizarBuzzer(bool activo)
-{
-    static uint32_t ultimoCambioMs = 0;
-    static bool encendido = false;
-
-    if (!activo)
-    {
-        noTone(PIN_BUZZER);
-        encendido = false;
-        return;
-    }
-    if (millis() - ultimoCambioMs >= PERIODO_BEEP_MS)
-    {
-        ultimoCambioMs = millis();
-        encendido = !encendido;
-
-        if (encendido)
-        {
-            tone(PIN_BUZZER, FRECUENCIA_BUZZER_HZ);
-        }
-        else
-        {
-            noTone(PIN_BUZZER);
-        }
-    }
-}
-
-void actualizarActuadores(states estado)
-{
-  bool alertaActiva = (estado != ST_SEGURO && estado != ST_INIT && estado != ST_ERROR);
-  bool ventilacionActiva = (estado == ST_TEMP_ELEVADA || estado == ST_TEMP_ELEVADA_Y_LUZ_DETECTADA ||
-                            estado == ST_TEMP_ELEVADA_Y_PUERTA_ABIERTA || estado == ST_TEMP_ELEVADA_Y_LUZ_DETECTADA_Y_PUERTA_ABIERTA);
-
-  switch (estado)
-  {
-    case ST_INIT:                establecerColorRGB(BRILLO_APAGADO, BRILLO_APAGADO, BRILLO_APAGADO); break;
-    case ST_SEGURO:               establecerColorRGB(BRILLO_APAGADO, BRILLO_MAXIMO,  BRILLO_APAGADO); break;
-    case ST_LUZ_DETECTADA:        establecerColorRGB(BRILLO_MAXIMO,  BRILLO_MAXIMO,  BRILLO_APAGADO); break;
-    case ST_TEMP_ELEVADA:         establecerColorRGB(BRILLO_MAXIMO,  BRILLO_APAGADO, BRILLO_APAGADO); break;
-    case ST_PUERTA_ABIERTA:       establecerColorRGB(BRILLO_APAGADO, BRILLO_APAGADO, BRILLO_MAXIMO); break;
-    case ST_TEMP_ELEVADA_Y_LUZ_DETECTADA:
-    case ST_LUZ_DETECTADA_Y_PUERTA_ABIERTA:
-    case ST_TEMP_ELEVADA_Y_PUERTA_ABIERTA:
-    case ST_TEMP_ELEVADA_Y_LUZ_DETECTADA_Y_PUERTA_ABIERTA:
-                                  establecerColorRGB(BRILLO_MAXIMO,  BRILLO_APAGADO, BRILLO_MAXIMO); break;
-    case ST_ERROR:                establecerColorRGB(BRILLO_MAXIMO,  BRILLO_APAGADO, BRILLO_APAGADO); break;
-  }
-
-  actualizarBuzzer(alertaActiva);
-  digitalWrite(PIN_RELE, ventilacionActiva ? HIGH : LOW);
-}
 /*----------------------FIN FUNCIONES DE ACTUADORES----------------------*/
+
+
+/* Comprueba durante la inicializacion que el sensor
+  DS18B20 se encuentre conectado y sea detectado
+  Retorna true si el sensor fue encontrado
+ */
+bool comprobar_sensor_temperatura()
+{
+    return sensor_temperatura.getDeviceCount() >= CANTIDAD_SENSORES_TEMPERATURA;
+}
+
 
 /*------------------------ BEGIN ESP32 ------------------------*/
 void setup() 
 {
-    ir_init();
-
     Serial.begin(VELOCIDAD_SERIAL);
     Serial.println("Smart Insulin Guardian System");
 
@@ -383,43 +342,72 @@ void setup()
     pinMode(PIN_SENSOR_MAGNETICO, INPUT_PULLUP);
     pinMode(PIN_SENSOR_LUZ, INPUT);
 
+    // OUTPUTS
     pinMode(PIN_BUZZER, OUTPUT);
     pinMode(PIN_RELE, OUTPUT);
 
+    // LED RGB
     inicializarPWMLed(PIN_LED_ROJO, CANAL_PWM_ROJO);
     inicializarPWMLed(PIN_LED_VERDE, CANAL_PWM_VERDE);
     inicializarPWMLed(PIN_LED_AZUL, CANAL_PWM_AZUL);
 
     // SENSOR DE TEMPERATURA
     sensor_temperatura.begin();
-    sensor_temperatura.setWaitForConversion(false); //evita que la ESP32 se bloquee mientras el DS18B20 realiza la medicion
+    sensor_temperatura.setWaitForConversion(false); 
 
     eventQueue = xQueueCreate(MAX_EVENTS_QUEUE,sizeof(events));
-    xTaskCreate(leer_sensor_magnetico,"sensor magnetico",1024*4,NULL,1,NULL);
+    xTaskCreate(leer_sensor_magnetico,"sensor temperatura",1024*4,NULL,1,NULL);
     xTaskCreate(leer_sensor_luz,"sensor luminico",1024*4,NULL,1,NULL);
     xTaskCreate(leer_sensor_temperatura,"sensor temperatura",1024*4,NULL,1,NULL);
 
-    a_seguro();
+        a_seguro();
+    }
+    else
+    {
+        Serial.println("ERROR: sensor de temperatura no detectado");
 
+        a_error();
+    }
 }
 
-void loop() 
+void loop()
 {
-    state_machine();
-    actualizarActuadores(current_state);
+    if(current_state != ST_ERROR)
+    {
+        state_machine();
+    }
+    else
+    {
+        vTaskDelay(pdMS_TO_TICKS(DELAY_1000_MS));
+    }
 }
-
-
-
 
 /*------------------------ END ESP32 ------------------------*/
 
-
-
 // ---------- INICIO FUNCIONES DE TRANSICION ---------- //
+
+/* Estado inicial: LED apagado, sin buzzer ni ventilacion. */
 void ir_init()
 {
     current_state = ST_INIT;
+    establecerColorRGB(BRILLO_APAGADO, BRILLO_APAGADO, BRILLO_APAGADO);
+    noTone(PIN_BUZZER);
+    digitalWrite(PIN_RELE, LOW);
+}
+
+/* Error de inicializacion: LED rojo y buzzer, sin ventilacion. */
+void a_error()
+{
+    current_state = ST_ERROR;
+
+    establecerColorRGB(
+        BRILLO_MAXIMO,
+        BRILLO_APAGADO,
+        BRILLO_APAGADO
+    );
+
+    tone(PIN_BUZZER, FRECUENCIA_BUZZER_HZ);
+    digitalWrite(PIN_RELE, LOW);
 }
 
 void none()
@@ -427,43 +415,75 @@ void none()
     // No se realiza cambio de estado
 }
 
+/* Estado seguro: LED verde, sin buzzer ni ventilacion. */
 void a_seguro()
 {
     current_state = ST_SEGURO;
+    establecerColorRGB(BRILLO_APAGADO, BRILLO_MAXIMO, BRILLO_APAGADO);
+    noTone(PIN_BUZZER);
+    digitalWrite(PIN_RELE, LOW);
 }
 
+/* Luz detectada: LED amarillo y buzzer, sin ventilacion. */
 void a_luz()
 {
     current_state = ST_LUZ_DETECTADA;
+    establecerColorRGB(BRILLO_MAXIMO, BRILLO_MAXIMO, BRILLO_APAGADO);
+    tone(PIN_BUZZER, FRECUENCIA_BUZZER_HZ);
+    digitalWrite(PIN_RELE, LOW);
 }
 
+/* Temperatura elevada: LED rojo, buzzer y ventilacion. */
 void a_temp()
 {
     current_state = ST_TEMP_ELEVADA;
+    establecerColorRGB(BRILLO_MAXIMO, BRILLO_APAGADO, BRILLO_APAGADO);
+    tone(PIN_BUZZER, FRECUENCIA_BUZZER_HZ);
+    digitalWrite(PIN_RELE, HIGH);
 }
 
+/* Puerta abierta: LED azul y buzzer, sin ventilacion. */
 void a_puerta()
 {
     current_state = ST_PUERTA_ABIERTA;
+    establecerColorRGB(BRILLO_APAGADO, BRILLO_APAGADO, BRILLO_MAXIMO);
+    tone(PIN_BUZZER, FRECUENCIA_BUZZER_HZ);
+    digitalWrite(PIN_RELE, LOW);
 }
 
+/* Temperatura elevada y luz detectada: LED magenta, buzzer y ventilacion. */
 void a_luztemp()
 {
     current_state = ST_TEMP_ELEVADA_Y_LUZ_DETECTADA;
+    establecerColorRGB(BRILLO_MAXIMO, BRILLO_APAGADO, BRILLO_MAXIMO);
+    tone(PIN_BUZZER, FRECUENCIA_BUZZER_HZ);
+    digitalWrite(PIN_RELE, HIGH);
 }
 
+/* Luz detectada y puerta abierta: LED magenta y buzzer, sin ventilacion. */
 void a_luzpuerta()
 {
     current_state = ST_LUZ_DETECTADA_Y_PUERTA_ABIERTA;
+    establecerColorRGB(BRILLO_MAXIMO, BRILLO_APAGADO, BRILLO_MAXIMO);
+    tone(PIN_BUZZER, FRECUENCIA_BUZZER_HZ);
+    digitalWrite(PIN_RELE, LOW);
 }
 
+/* Temperatura elevada y puerta abierta: LED magenta, buzzer y ventilacion. */
 void a_temppuerta()
 {
     current_state = ST_TEMP_ELEVADA_Y_PUERTA_ABIERTA;
+    establecerColorRGB(BRILLO_MAXIMO, BRILLO_APAGADO, BRILLO_MAXIMO);
+    tone(PIN_BUZZER, FRECUENCIA_BUZZER_HZ);
+    digitalWrite(PIN_RELE, HIGH);
 }
 
+/* Las tres condiciones activas: LED magenta, buzzer y ventilacion. */
 void a_completo()
 {
     current_state = ST_TEMP_ELEVADA_Y_LUZ_DETECTADA_Y_PUERTA_ABIERTA;
+    establecerColorRGB(BRILLO_MAXIMO, BRILLO_APAGADO, BRILLO_MAXIMO);
+    tone(PIN_BUZZER, FRECUENCIA_BUZZER_HZ);
+    digitalWrite(PIN_RELE, HIGH);
 }
 // ---------- FIN FUNCIONES DE TRANSICION ---------- //
