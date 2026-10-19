@@ -1,0 +1,22 @@
+<resources>
+    <string name="app_name">Smart Insulin Guardian</string>
+    <string name="titulo_principal">Smart Insulin Guardian</string>
+    <string name="estado_inicial">Estado: --</string>
+    <string name="temperatura_inicial">Temperatura: -- °C</string>
+    <string name="boton_silenciar">Silenciar alarma</string>
+    <string name="boton_grafico">Ver gráfico de temperatura</string>
+    <string name="msg_silenciar_pendiente">Envío del comando pendiente (Versión 3)</string>
+    <string name="titulo_grafico">Temperatura (últimas lecturas)</string>
+    <string name="ultima_lectura_vacia">Última lectura: -- °C</string>
+    <string name="ultima_lectura">Última lectura: %1$.1f °C (%2$s)</string>
+    <string name="etiqueta_limite_max">Máx %1$.0f °C</string>
+    <string name="sin_datos_grafico">Sin datos</string>
+    <string name="boton_sensor">Silenciar sacudiendo el celular</string>
+    <string name="titulo_sensor">Sacudir para silenciar</string>
+    <string name="instruccion_sensor">Sacudí el celular para silenciar la alarma. Volvé a sacudirlo para reactivarla.</string>
+    <string name="valores_inicial">X: -- Y: -- Z: -- (m/s²)</string>
+    <string name="valores_acelerometro">X: %1$.2f Y: %2$.2f Z: %3$.2f (m/s²)</string>
+    <string name="alarma_activa">Alarma: activa</string>
+    <string name="alarma_silenciada">Alarma: silenciada</string>
+    <string name="sin_acelerometro">Este dispositivo no tiene acelerómetro</string>
+</resources>
