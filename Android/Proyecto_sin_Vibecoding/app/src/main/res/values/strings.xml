@@ -5,7 +5,9 @@
     <string name="temperatura_inicial">Temperatura: -- °C</string>
     <string name="boton_silenciar">Silenciar alarma</string>
     <string name="boton_grafico">Ver gráfico de temperatura</string>
-    <string name="msg_silenciar_pendiente">Envío del comando pendiente (Versión 3)</string>
+    <string name="boton_reactivar">Reactivar alarma</string>
+    <string name="msg_comando_enviado">Comando %1$s enviado</string>
+    <string name="msg_error_broker">No se pudo enviar el comando al broker</string>
     <string name="titulo_grafico">Temperatura (últimas lecturas)</string>
     <string name="ultima_lectura_vacia">Última lectura: -- °C</string>
     <string name="ultima_lectura">Última lectura: %1$.1f °C (%2$s)</string>

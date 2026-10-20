@@ -8,12 +8,33 @@ import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
 
+import org.eclipse.paho.client.mqttv3.MqttClient;
+import org.eclipse.paho.client.mqttv3.MqttConnectOptions;
+import org.eclipse.paho.client.mqttv3.MqttException;
+import org.eclipse.paho.client.mqttv3.MqttMessage;
+import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence;
+
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
 /**
  * Pantalla principal: muestra el estado y la temperatura del sistema embebido,
  * permite silenciar la alarma y navegar al grafico de temperatura.
- * En la Version 2 es un prototipo; la comunicacion MQTT se completa en la Version 3.
+ * El boton de alarma publica SILENCIAR / REACTIVAR en el broker MQTT.
  */
 public class MainActivity extends AppCompatActivity {
+
+    private static final String BROKER_URI = "tcp://broker.emqx.io:1883";
+    private static final String TOPIC_COMANDO = "/unlam/insulin_guardian/L4/comando";
+    private static final String COMANDO_SILENCIAR = "SILENCIAR";
+    private static final String COMANDO_REACTIVAR = "REACTIVAR";
+    private static final int MQTT_QOS = 1;
+    private static final int MQTT_TIMEOUT_S = 10;
+
+    /** Hilo de fondo para no bloquear la UI con operaciones de red. */
+    private final ExecutorService ejecutorMqtt = Executors.newSingleThreadExecutor();
+    /** Ultimo comando enviado con exito; la alarma arranca activa. */
+    private String ultimoComando = COMANDO_REACTIVAR;
 
     private TextView tvEstado;
     private TextView tvTemperatura;
@@ -46,9 +67,72 @@ public class MainActivity extends AppCompatActivity {
         btnSensor.setOnClickListener(v -> abrirSensor());
     }
 
-    /** Prototipo: informa que el envio del comando SILENCIAR se implementa en la Version 3. */
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        ejecutorMqtt.shutdownNow();
+    }
+
+    /**
+     * Publica en el broker el comando opuesto al ultimo enviado:
+     * SILENCIAR si la alarma estaba reactivada, REACTIVAR si estaba silenciada.
+     */
     private void alSilenciarAlarma() {
-        Toast.makeText(this, R.string.msg_silenciar_pendiente, Toast.LENGTH_SHORT).show();
+        String comando = COMANDO_REACTIVAR.equals(ultimoComando) ? COMANDO_SILENCIAR : COMANDO_REACTIVAR;
+        btnSilenciar.setEnabled(false);
+        ejecutorMqtt.execute(() -> {
+            boolean enviado = publicarComando(comando);
+            runOnUiThread(() -> alFinalizarEnvio(comando, enviado));
+        });
+    }
+
+    /** Se conecta al broker, publica el comando y se desconecta. Devuelve true si se envio. */
+    private boolean publicarComando(String comando) {
+        MqttClient cliente = null;
+        try {
+            cliente = new MqttClient(BROKER_URI, MqttClient.generateClientId(), new MemoryPersistence());
+            MqttConnectOptions opciones = new MqttConnectOptions();
+            opciones.setCleanSession(true);
+            opciones.setConnectionTimeout(MQTT_TIMEOUT_S);
+            cliente.connect(opciones);
+
+            MqttMessage mensaje = new MqttMessage(comando.getBytes());
+            mensaje.setQos(MQTT_QOS);
+            cliente.publish(TOPIC_COMANDO, mensaje);
+            return true;
+        } catch (MqttException e) {
+            return false;
+        } finally {
+            cerrarCliente(cliente);
+        }
+    }
+
+    /** Desconecta y libera el cliente MQTT, ignorando errores al cerrar. */
+    private void cerrarCliente(MqttClient cliente) {
+        if (cliente == null) {
+            return;
+        }
+        try {
+            if (cliente.isConnected()) {
+                cliente.disconnect();
+            }
+            cliente.close();
+        } catch (MqttException ignorada) {
+            // No hay nada mas que hacer si falla el cierre.
+        }
+    }
+
+    /** Actualiza el estado y la UI segun el resultado del envio. */
+    private void alFinalizarEnvio(String comando, boolean enviado) {
+        btnSilenciar.setEnabled(true);
+        if (!enviado) {
+            Toast.makeText(this, R.string.msg_error_broker, Toast.LENGTH_SHORT).show();
+            return;
+        }
+        ultimoComando = comando;
+        btnSilenciar.setText(COMANDO_SILENCIAR.equals(comando)
+                ? R.string.boton_reactivar : R.string.boton_silenciar);
+        Toast.makeText(this, getString(R.string.msg_comando_enviado, comando), Toast.LENGTH_SHORT).show();
     }
 
     /** Abre la pantalla del grafico de temperatura mediante un Intent explicito. */
