@@ -24,12 +24,9 @@ import java.util.concurrent.Executors;
  */
 public class MainActivity extends AppCompatActivity {
 
-    private static final String BROKER_URI = "tcp://broker.emqx.io:1883";
-    private static final String TOPIC_COMANDO = "/unlam/insulin_guardian/L4/comando";
     private static final String COMANDO_SILENCIAR = "SILENCIAR";
     private static final String COMANDO_REACTIVAR = "REACTIVAR";
     private static final int MQTT_QOS = 1;
-    private static final int MQTT_TIMEOUT_S = 10;
 
     /** Hilo de fondo para no bloquear la UI con operaciones de red. */
     private final ExecutorService ejecutorMqtt = Executors.newSingleThreadExecutor();
@@ -90,15 +87,15 @@ public class MainActivity extends AppCompatActivity {
     private boolean publicarComando(String comando) {
         MqttClient cliente = null;
         try {
-            cliente = new MqttClient(BROKER_URI, MqttClient.generateClientId(), new MemoryPersistence());
+            cliente = new MqttClient(ConfiguracionMqtt.BROKER_URI, MqttClient.generateClientId(), new MemoryPersistence());
             MqttConnectOptions opciones = new MqttConnectOptions();
             opciones.setCleanSession(true);
-            opciones.setConnectionTimeout(MQTT_TIMEOUT_S);
+            opciones.setConnectionTimeout(ConfiguracionMqtt.TIMEOUT_CONEXION_S);
             cliente.connect(opciones);
 
             MqttMessage mensaje = new MqttMessage(comando.getBytes());
             mensaje.setQos(MQTT_QOS);
-            cliente.publish(TOPIC_COMANDO, mensaje);
+            cliente.publish(ConfiguracionMqtt.TOPIC_COMANDO, mensaje);
             return true;
         } catch (MqttException e) {
             return false;
