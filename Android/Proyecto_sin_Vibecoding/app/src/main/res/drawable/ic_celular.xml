@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Celular con lineas de movimiento a los costados; se anima en avd_celular_sacudida. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="120dp"
+    android:height="120dp"
+    android:viewportWidth="120"
+    android:viewportHeight="120">
+
+    <group android:name="lineas">
+        <path
+            android:name="lineasIzquierda"
+            android:pathData="M30,46 Q24,60 30,74 M22,40 Q13,60 22,80"
+            android:strokeAlpha="0"
+            android:strokeColor="#1E88E5"
+            android:strokeLineCap="round"
+            android:strokeWidth="3" />
+        <path
+            android:name="lineasDerecha"
+            android:pathData="M90,46 Q96,60 90,74 M98,40 Q107,60 98,80"
+            android:strokeAlpha="0"
+            android:strokeColor="#1E88E5"
+            android:strokeLineCap="round"
+            android:strokeWidth="3" />
+    </group>
+
+    <group
+        android:name="celular"
+        android:pivotX="60"
+        android:pivotY="60">
+        <path
+            android:fillColor="#1E88E5"
+            android:pathData="M47,24 h26 a6,6 0 0 1 6,6 v60 a6,6 0 0 1 -6,6 h-26 a6,6 0 0 1 -6,-6 v-60 a6,6 0 0 1 6,-6 z" />
+        <path
+            android:fillColor="#E3F2FD"
+            android:pathData="M45,32 h30 v50 h-30 z" />
+        <path
+            android:fillColor="#E3F2FD"
+            android:pathData="M57,89 a3,3 0 1 0 6,0 a3,3 0 1 0 -6,0 z" />
+    </group>
+</vector>

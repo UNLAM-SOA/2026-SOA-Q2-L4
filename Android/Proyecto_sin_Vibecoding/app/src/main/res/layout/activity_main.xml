@@ -41,12 +41,5 @@
         android:id="@+id/btnGrafico"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginBottom="16dp"
         android:text="@string/boton_grafico" />
-
-    <Button
-        android:id="@+id/btnSensor"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="@string/boton_sensor" />
 </LinearLayout>

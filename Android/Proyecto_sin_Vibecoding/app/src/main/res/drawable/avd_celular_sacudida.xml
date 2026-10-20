@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Animacion de un celular sacudiendose, usada en el dialogo que explica el gesto. -->
+<animated-vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:drawable="@drawable/ic_celular">
+    <target
+        android:name="celular"
+        android:animation="@animator/sacudida_celular" />
+    <target
+        android:name="lineasIzquierda"
+        android:animation="@animator/lineas_movimiento" />
+    <target
+        android:name="lineasDerecha"
+        android:animation="@animator/lineas_movimiento" />
+</animated-vector>

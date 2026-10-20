@@ -1,0 +1,23 @@
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:gravity="center_horizontal"
+    android:orientation="vertical"
+    android:padding="24dp">
+
+    <ImageView
+        android:id="@+id/ivCelularSacudida"
+        android:layout_width="120dp"
+        android:layout_height="120dp"
+        android:layout_marginBottom="16dp"
+        android:contentDescription="@string/mensaje_dialogo_sacudida"
+        android:src="@drawable/avd_celular_sacudida" />
+
+    <TextView
+        android:id="@+id/tvMensajeSacudida"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:text="@string/mensaje_dialogo_sacudida"
+        android:textSize="16sp" />
+</LinearLayout>
