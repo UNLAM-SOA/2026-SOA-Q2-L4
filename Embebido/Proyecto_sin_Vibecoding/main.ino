@@ -57,8 +57,8 @@
 #define CANAL_PWM_AZUL  2
 
 // CONFIGURACION DE SENSORES 
-#define UMBRAL_TEMP_MIN          4
-#define UMBRAL_TEMP_MAX          8    //la insulina no debe superar los 8 grados
+#define UMBRAL_TEMP_MIN          24
+#define UMBRAL_TEMP_MAX          25    //la insulina no debe superar los 8 grados
 #define UMBRAL_LUZ_DETECTADA     2000 // segun LDR en wokwi 4063= cerrado (poca luz); 32=abierto (mucha luz), definimos un valor intermedio
 
 /*------------------------ FIN INCLUDES Y DEFINE ------------------------*/
@@ -86,8 +86,8 @@ volatile bool estado_pendiente_publicar = true;
 
 /*------------------------ INICIO DECLARACION VARIABLES PARA LA COMUNICACION MQTT ------------------------*/
 // WIFI WOKWI
-const char* WIFI_SSID = "Wokwi-GUEST";
-const char* WIFI_PASSWORD = "";
+const char* WIFI_SSID = "SO Avanzados";
+const char* WIFI_PASSWORD = "SOA.2019";
 
 // MQTT
 const char* MQTT_SERVER = "broker.emqx.io";
@@ -280,7 +280,7 @@ void leer_sensor_luz(void* p)
     {
         value = analogRead(PIN_SENSOR_LUZ);
 
-        if(value <= UMBRAL_LUZ_DETECTADA)
+        if(value >= UMBRAL_LUZ_DETECTADA)
         {
             event = EV_LUZ_DETECTADA;
         }
