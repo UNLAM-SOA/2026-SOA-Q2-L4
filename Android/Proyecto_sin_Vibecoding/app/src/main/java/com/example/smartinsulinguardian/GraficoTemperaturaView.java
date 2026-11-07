@@ -35,6 +35,7 @@ public class GraficoTemperaturaView extends View {
 
     private static final float RANGO_MIN_C = 0f;
     private static final float RANGO_MAX_C = 12f;
+    private static final float LIMITE_TEMP_MIN_C = 2f;
     private static final float LIMITE_TEMP_MAX_C = 8f;
 
     private static final float MARGEN_IZQUIERDO_DP = 40f;
@@ -52,6 +53,7 @@ public class GraficoTemperaturaView extends View {
 
     private static final int ALFA_GUIAS = 60;
     private static final int COLOR_LINEA = 0xFF1E88E5;
+    private static final int COLOR_LIMITE_MINIMO = 0xFF00897B;
     private static final int COLOR_ALERTA = 0xFFE53935;
 
     /** Una lectura de temperatura con el momento en que se tomo. */
@@ -75,6 +77,7 @@ public class GraficoTemperaturaView extends View {
     private final Paint pincelLinea = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint pincelPunto = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint pincelLimite = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint pincelLimiteMinimo = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint pincelTexto = new Paint(Paint.ANTI_ALIAS_FLAG);
 
     private float densidad;
@@ -113,6 +116,11 @@ public class GraficoTemperaturaView extends View {
         pincelLimite.setStyle(Paint.Style.STROKE);
         pincelLimite.setStrokeWidth(GROSOR_LIMITE_DP * densidad);
         pincelLimite.setPathEffect(new DashPathEffect(new float[]{guion, guion}, 0f));
+
+        pincelLimiteMinimo.setColor(COLOR_LIMITE_MINIMO);
+        pincelLimiteMinimo.setStyle(Paint.Style.STROKE);
+        pincelLimiteMinimo.setStrokeWidth(GROSOR_LIMITE_DP * densidad);
+        pincelLimiteMinimo.setPathEffect(new DashPathEffect(new float[]{guion, guion}, 0f));
 
         pincelTexto.setColor(colorTexto);
         pincelTexto.setTextSize(TypedValue.applyDimension(
@@ -199,16 +207,20 @@ public class GraficoTemperaturaView extends View {
         canvas.drawLine(izquierda, abajo, derecha, abajo, pincelEje);
     }
 
-    /** Dibuja la linea punteada del limite maximo de temperatura con su etiqueta. */
+    /** Dibuja las lineas punteadas de los limites minimo y maximo con sus etiquetas. */
     private void dibujarLimite(Canvas canvas, float izquierda, float arriba, float derecha,
                                float abajo, float minimo, float maximo) {
-        float y = convertirY(LIMITE_TEMP_MAX_C, minimo, maximo, arriba, abajo);
+        float yMinimo = convertirY(LIMITE_TEMP_MIN_C, minimo, maximo, arriba, abajo);
+        float yMaximo = convertirY(LIMITE_TEMP_MAX_C, minimo, maximo, arriba, abajo);
 
-        canvas.drawLine(izquierda, y, derecha, y, pincelLimite);
+        canvas.drawLine(izquierda, yMinimo, derecha, yMinimo, pincelLimiteMinimo);
+        canvas.drawLine(izquierda, yMaximo, derecha, yMaximo, pincelLimite);
 
         pincelTexto.setTextAlign(Paint.Align.RIGHT);
+        canvas.drawText(getContext().getString(R.string.etiqueta_limite_min, LIMITE_TEMP_MIN_C),
+                derecha, yMinimo - SEPARACION_TEXTO_DP * densidad, pincelTexto);
         canvas.drawText(getContext().getString(R.string.etiqueta_limite_max, LIMITE_TEMP_MAX_C),
-                derecha, y - SEPARACION_TEXTO_DP * densidad, pincelTexto);
+                derecha, yMaximo - SEPARACION_TEXTO_DP * densidad, pincelTexto);
     }
 
     /** Dibuja la linea de lecturas y un punto por lectura (rojo si alcanza el limite). */
