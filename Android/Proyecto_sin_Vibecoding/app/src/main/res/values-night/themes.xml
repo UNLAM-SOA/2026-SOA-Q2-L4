@@ -1,11 +1,14 @@
 <resources>
     <style name="Base.Theme.SmartInsulinGuardian" parent="Theme.Material3.DayNight.NoActionBar">
         <item name="colorPrimary">@color/color_primario</item>
-        <item name="colorOnPrimary">@color/texto_principal</item>
+        <item name="colorOnPrimary">@color/color_on_primario</item>
         <item name="colorSecondary">@color/color_primario</item>
+        <item name="colorOnSecondary">@color/color_on_primario</item>
         <item name="colorSurface">@color/superficie</item>
         <item name="colorOnSurface">@color/texto_principal</item>
+        <item name="colorError">@color/estado_error</item>
         <item name="android:colorBackground">@color/fondo_app</item>
+        <item name="android:windowBackground">@color/fondo_app</item>
         <item name="android:statusBarColor">@color/fondo_app</item>
         <item name="android:navigationBarColor">@color/fondo_app</item>
         <item name="android:windowLightStatusBar">false</item>

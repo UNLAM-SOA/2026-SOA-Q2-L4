@@ -7,6 +7,7 @@
     <string name="etiqueta_temperatura">TEMPERATURA ACTUAL</string>
     <string name="etiqueta_control">Control de alarma</string>
     <string name="ayuda_sacudida">También podés sacudir el celular para alternar la alarma.</string>
+    <string name="descripcion_icono_estado">Indicador del estado del sistema</string>
     <string name="estado_inicial">Esperando estado del dispositivo…</string>
     <string name="estado_actual">Estado: %1$s</string>
     <string name="temperatura_inicial">Esperando lectura del sensor…</string>

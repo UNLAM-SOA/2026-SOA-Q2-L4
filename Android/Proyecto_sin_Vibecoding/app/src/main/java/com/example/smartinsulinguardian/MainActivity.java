@@ -1,6 +1,7 @@
 package com.example.smartinsulinguardian;
 
 import android.content.Intent;
+import android.content.res.ColorStateList;
 import android.graphics.drawable.Animatable;
 import android.graphics.drawable.Drawable;
 import android.hardware.Sensor;
@@ -11,12 +12,14 @@ import android.os.Bundle;
 import android.os.SystemClock;
 import android.view.View;
 import android.widget.ImageView;
-import android.widget.Button;
 import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.content.ContextCompat;
+
+import com.google.android.material.button.MaterialButton;
 
 import org.eclipse.paho.client.mqttv3.MqttClient;
 import org.eclipse.paho.client.mqttv3.IMqttDeliveryToken;
@@ -27,6 +30,7 @@ import org.eclipse.paho.client.mqttv3.MqttMessage;
 import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence;
 
 import java.nio.charset.StandardCharsets;
+import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -61,6 +65,8 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     private SensorManager sensorManager;
     private Sensor acelerometro;
     private volatile boolean pantallaVisible;
+    private boolean brokerConectado;
+    private boolean envioComandoEnCurso;
     private int picos = 0;
     private long instanteUltimoPico = 0L;
     private long instanteUltimaAccion = 0L;
@@ -68,8 +74,11 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     private TextView tvEstado;
     private TextView tvTemperatura;
     private TextView tvConexion;
-    private Button btnSilenciar;
-    private Button btnGrafico;
+    private ImageView ivEstado;
+    private View viewConexion;
+    private MaterialButton btnSilenciar;
+    private MaterialButton btnReactivar;
+    private MaterialButton btnGrafico;
     private MqttClient clienteDatos;
 
     @Override
@@ -78,6 +87,7 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         setContentView(R.layout.activity_main);
 
         enlazarVistas();
+        actualizarDisponibilidadComandos();
         configurarBotones();
 
         sensorManager = (SensorManager) getSystemService(SENSOR_SERVICE);
@@ -89,7 +99,11 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         super.onResume();
         pantallaVisible = true;
         tvEstado.setText(R.string.estado_inicial);
+        ivEstado.setImageTintList(ColorStateList.valueOf(
+                ContextCompat.getColor(this, R.color.color_primario)));
         tvTemperatura.setText(R.string.temperatura_inicial);
+        brokerConectado = false;
+        envioComandoEnCurso = false;
         actualizarEstadoConexion(R.string.conexion_conectando);
         if (acelerometro != null) {
             sensorManager.registerListener(this, acelerometro, SensorManager.SENSOR_DELAY_GAME);
@@ -108,21 +122,25 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     /** Obtiene las referencias a las vistas definidas en el layout. */
     private void enlazarVistas() {
         tvEstado = findViewById(R.id.tvEstado);
+        ivEstado = findViewById(R.id.ivEstado);
         tvTemperatura = findViewById(R.id.tvTemperatura);
         tvConexion = findViewById(R.id.tvConexion);
+        viewConexion = findViewById(R.id.viewConexion);
         btnSilenciar = findViewById(R.id.btnSilenciar);
+        btnReactivar = findViewById(R.id.btnReactivar);
         btnGrafico = findViewById(R.id.btnGrafico);
     }
 
     /** Asigna la accion de cada boton. */
     private void configurarBotones() {
-        btnSilenciar.setOnClickListener(v -> alTocarBotonAlarma());
+        btnSilenciar.setOnClickListener(v -> alTocarBotonSilenciar());
+        btnReactivar.setOnClickListener(v -> enviarComandoAlarma(COMANDO_REACTIVAR));
         btnGrafico.setOnClickListener(v -> abrirGrafico());
     }
 
-    /** Envia el comando de alarma y avisa que tambien se puede hacer sacudiendo el celular. */
-    private void alTocarBotonAlarma() {
-        alSilenciarAlarma();
+    /** Envia la orden de silenciar y muestra la ayuda del sensor del celular. */
+    private void alTocarBotonSilenciar() {
+        enviarComandoAlarma(COMANDO_SILENCIAR);
         mostrarDialogoSacudida();
     }
 
@@ -239,7 +257,20 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     private void actualizarEstadoConexion(int recursoTexto) {
         runOnUiThread(() -> {
             if (pantallaVisible) {
+                if (recursoTexto == R.string.conexion_conectado) {
+                    brokerConectado = true;
+                } else if (recursoTexto != R.string.conexion_dato_invalido) {
+                    brokerConectado = false;
+                }
                 tvConexion.setText(recursoTexto);
+                int colorConexion = brokerConectado
+                        ? R.color.conexion_conectado
+                        : (recursoTexto == R.string.conexion_conectando
+                        || recursoTexto == R.string.conexion_reconectando
+                        ? R.color.conexion_conectando : R.color.conexion_error);
+                viewConexion.setBackgroundTintList(ColorStateList.valueOf(
+                        ContextCompat.getColor(this, colorConexion)));
+                actualizarDisponibilidadComandos();
             }
         });
     }
@@ -267,11 +298,7 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         public void messageArrived(String topico, MqttMessage mensaje) {
             String contenido = new String(mensaje.getPayload(), StandardCharsets.UTF_8).trim();
             if (ConfiguracionMqtt.TOPIC_ESTADO.equals(topico)) {
-                runOnUiThread(() -> {
-                    if (pantallaVisible) {
-                        tvEstado.setText(getString(R.string.estado_actual, contenido));
-                    }
-                });
+                runOnUiThread(() -> actualizarVistaEstado(contenido));
                 return;
             }
             if (ConfiguracionMqtt.TOPIC_TEMPERATURA.equals(topico)) {
@@ -304,15 +331,73 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
      * Se ignora si todavia hay un envio en curso.
      */
     private void alSilenciarAlarma() {
-        if (!btnSilenciar.isEnabled()) {
+        if (!brokerConectado || envioComandoEnCurso) {
             return;
         }
         String comando = COMANDO_REACTIVAR.equals(ultimoComando) ? COMANDO_SILENCIAR : COMANDO_REACTIVAR;
-        btnSilenciar.setEnabled(false);
+        enviarComandoAlarma(comando);
+    }
+
+    /** Envia el comando solicitado y deshabilita ambos botones durante el envio. */
+    private void enviarComandoAlarma(String comando) {
+        if (!brokerConectado || envioComandoEnCurso) {
+            return;
+        }
+        envioComandoEnCurso = true;
+        actualizarDisponibilidadComandos();
         ejecutorMqtt.execute(() -> {
             boolean enviado = publicarComando(comando);
             runOnUiThread(() -> alFinalizarEnvio(comando, enviado));
         });
+    }
+
+    /** Habilita los comandos solo mientras el broker esta conectado y no hay un envio activo. */
+    private void actualizarDisponibilidadComandos() {
+        boolean habilitados = brokerConectado && !envioComandoEnCurso;
+        btnSilenciar.setEnabled(habilitados);
+        btnReactivar.setEnabled(habilitados);
+    }
+
+    /** Actualiza el texto y el color del icono segun el estado publicado por el embebido. */
+    private void actualizarVistaEstado(String estado) {
+        if (!pantallaVisible) {
+            return;
+        }
+        tvEstado.setText(getString(R.string.estado_actual, estado));
+        ivEstado.setImageTintList(ColorStateList.valueOf(
+                ContextCompat.getColor(this, obtenerColorEstado(estado))));
+    }
+
+    /** Asocia el estado MQTT con el color que representa al estado del dispositivo. */
+    private int obtenerColorEstado(String estado) {
+        String estadoNormalizado = estado.toUpperCase(Locale.ROOT);
+        if (estadoNormalizado.contains("ERROR")) {
+            return R.color.estado_error;
+        }
+
+        boolean temperaturaElevada = estadoNormalizado.contains("TEMP_ELEVADA");
+        boolean luzDetectada = estadoNormalizado.contains("LUZ_DETECTADA");
+        boolean puertaAbierta = estadoNormalizado.contains("PUERTA_ABIERTA");
+        int condicionesActivas = (temperaturaElevada ? 1 : 0)
+                + (luzDetectada ? 1 : 0)
+                + (puertaAbierta ? 1 : 0);
+
+        if (condicionesActivas > 1) {
+            return R.color.estado_combinado;
+        }
+        if (temperaturaElevada) {
+            return R.color.estado_temp;
+        }
+        if (luzDetectada) {
+            return R.color.estado_luz;
+        }
+        if (puertaAbierta) {
+            return R.color.estado_puerta;
+        }
+        if (estadoNormalizado.contains("SEGURO")) {
+            return R.color.estado_seguro;
+        }
+        return R.color.color_primario;
     }
 
     /** Se conecta al broker, publica el comando y se desconecta. Devuelve true si se envio. */
@@ -353,14 +438,13 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
 
     /** Actualiza el estado y la UI segun el resultado del envio. */
     private void alFinalizarEnvio(String comando, boolean enviado) {
-        btnSilenciar.setEnabled(true);
+        envioComandoEnCurso = false;
+        actualizarDisponibilidadComandos();
         if (!enviado) {
             Toast.makeText(this, R.string.msg_error_broker, Toast.LENGTH_SHORT).show();
             return;
         }
         ultimoComando = comando;
-        btnSilenciar.setText(COMANDO_SILENCIAR.equals(comando)
-                ? R.string.boton_reactivar : R.string.boton_silenciar);
         Toast.makeText(this, getString(R.string.msg_comando_enviado, comando), Toast.LENGTH_SHORT).show();
     }
 

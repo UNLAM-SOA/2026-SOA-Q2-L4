@@ -1,10 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <color name="color_primario">#176B5B</color>
+    <color name="color_on_primario">#FFFFFF</color>
     <color name="fondo_app">#F3F7F5</color>
     <color name="superficie">#FFFFFF</color>
     <color name="texto_principal">#17332F</color>
     <color name="texto_secundario">#60736F</color>
     <color name="borde">#DCE7E2</color>
     <color name="fondo_estado">#E5F3EE</color>
+    <color name="estado_seguro">#2E7D32</color>
+    <color name="estado_luz">#8A5E00</color>
+    <color name="estado_temp">#C62828</color>
+    <color name="estado_puerta">#1565C0</color>
+    <color name="estado_combinado">#AD1457</color>
+    <color name="estado_error">#8E0000</color>
+    <color name="conexion_conectado">#2E7D32</color>
+    <color name="conexion_conectando">#8A5E00</color>
+    <color name="conexion_error">#B3261E</color>
 </resources>

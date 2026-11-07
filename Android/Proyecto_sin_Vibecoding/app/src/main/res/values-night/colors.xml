@@ -1,9 +1,19 @@
 <resources>
     <color name="color_primario">#82D4B8</color>
+    <color name="color_on_primario">#17332F</color>
     <color name="fondo_app">#101A18</color>
     <color name="superficie">#1B2926</color>
     <color name="texto_principal">#E2F0EA</color>
     <color name="texto_secundario">#A5B9B1</color>
     <color name="borde">#30423D</color>
     <color name="fondo_estado">#263D35</color>
+    <color name="estado_seguro">#81C784</color>
+    <color name="estado_luz">#FFD54F</color>
+    <color name="estado_temp">#EF9A9A</color>
+    <color name="estado_puerta">#90CAF9</color>
+    <color name="estado_combinado">#F48FB1</color>
+    <color name="estado_error">#FF8A80</color>
+    <color name="conexion_conectado">#81C784</color>
+    <color name="conexion_conectando">#FFD54F</color>
+    <color name="conexion_error">#F2B8B5</color>
 </resources>

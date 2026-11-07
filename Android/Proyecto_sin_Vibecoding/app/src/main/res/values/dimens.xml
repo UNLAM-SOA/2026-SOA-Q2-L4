@@ -1,32 +1,18 @@
 <resources>
-    <dimen name="margen_pantalla">24dp</dimen>
-    <dimen name="espaciado_4">4dp</dimen>
-    <dimen name="espaciado_6">6dp</dimen>
+    <dimen name="margen_pantalla">16dp</dimen>
     <dimen name="espaciado_8">8dp</dimen>
     <dimen name="espaciado_12">12dp</dimen>
     <dimen name="espaciado_16">16dp</dimen>
-    <dimen name="espaciado_18">18dp</dimen>
     <dimen name="espaciado_20">20dp</dimen>
     <dimen name="espaciado_24">24dp</dimen>
-
-    <dimen name="altura_divisor">1dp</dimen>
     <dimen name="grosor_borde">1dp</dimen>
     <dimen name="sin_elevacion">0dp</dimen>
     <dimen name="elevacion_tarjeta">2dp</dimen>
-    <dimen name="radio_estado">12dp</dimen>
     <dimen name="radio_boton">16dp</dimen>
     <dimen name="radio_tarjeta_secundaria">20dp</dimen>
     <dimen name="radio_tarjeta">24dp</dimen>
     <dimen name="altura_boton">56dp</dimen>
-    <dimen name="altura_grafico">340dp</dimen>
-    <dimen name="tamano_icono_celular">120dp</dimen>
-
-    <dimen name="texto_etiqueta">12sp</dimen>
-    <dimen name="texto_cuerpo">14sp</dimen>
-    <dimen name="texto_subtitulo_grafico">15sp</dimen>
-    <dimen name="texto_cuerpo_grande">16sp</dimen>
-    <dimen name="texto_seccion">18sp</dimen>
-    <dimen name="texto_titulo_grafico">26sp</dimen>
-    <dimen name="texto_temperatura">28sp</dimen>
-    <dimen name="texto_titulo">30sp</dimen>
+    <dimen name="tamano_icono_estado">36dp</dimen>
+    <dimen name="tamano_indicador_conexion">12dp</dimen>
+    <dimen name="radio_indicador_conexion">6dp</dimen>
 </resources>
