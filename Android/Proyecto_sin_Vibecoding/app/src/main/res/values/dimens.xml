@@ -12,6 +12,7 @@
     <dimen name="radio_tarjeta_secundaria">20dp</dimen>
     <dimen name="radio_tarjeta">24dp</dimen>
     <dimen name="altura_boton">56dp</dimen>
+    <dimen name="altura_grafico">340dp</dimen>
     <dimen name="tamano_icono_estado">36dp</dimen>
     <dimen name="tamano_indicador_conexion">12dp</dimen>
     <dimen name="radio_indicador_conexion">6dp</dimen>

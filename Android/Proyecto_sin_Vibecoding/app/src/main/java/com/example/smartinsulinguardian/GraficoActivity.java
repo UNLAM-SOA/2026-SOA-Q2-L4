@@ -5,6 +5,8 @@ import android.widget.TextView;
 
 import androidx.appcompat.app.AppCompatActivity;
 
+import com.google.android.material.appbar.MaterialToolbar;
+
 import org.eclipse.paho.client.mqttv3.IMqttDeliveryToken;
 import org.eclipse.paho.client.mqttv3.MqttCallbackExtended;
 import org.eclipse.paho.client.mqttv3.MqttClient;
@@ -47,6 +49,8 @@ public class GraficoActivity extends AppCompatActivity {
         grafico = findViewById(R.id.graficoTemperatura);
         tvUltimaLectura = findViewById(R.id.tvUltimaLectura);
         tvConexion = findViewById(R.id.tvConexionGrafico);
+        MaterialToolbar toolbar = findViewById(R.id.toolbarGrafico);
+        toolbar.setNavigationOnClickListener(v -> finish());
     }
 
     @Override

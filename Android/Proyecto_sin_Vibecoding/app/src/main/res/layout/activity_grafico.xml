@@ -1,89 +1,113 @@
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/fondo_app"
-    android:fillViewport="true">
+    android:background="@color/fondo_app">
 
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:padding="24dp">
+    <com.google.android.material.appbar.MaterialToolbar
+        android:id="@+id/toolbarGrafico"
+        android:layout_width="0dp"
+        android:layout_height="?attr/actionBarSize"
+        android:background="@color/fondo_app"
+        app:navigationContentDescription="@string/descripcion_volver"
+        app:navigationIcon="@drawable/ic_arrow_back"
+        app:navigationIconTint="@color/texto_principal"
+        app:title="@string/titulo_barra_grafico"
+        app:titleTextColor="@color/texto_principal"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
 
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/etiqueta_historial"
-            android:textColor="@color/color_primario"
-            android:textSize="12sp"
-            android:textStyle="bold"
-            android:letterSpacing="0.12" />
+    <androidx.core.widget.NestedScrollView
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:clipToPadding="false"
+        android:fillViewport="true"
+        android:padding="@dimen/margen_pantalla"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/toolbarGrafico">
 
-        <TextView
-            android:id="@+id/tvTituloGrafico"
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:text="@string/titulo_grafico"
-            android:textColor="@color/texto_principal"
-            android:textSize="26sp"
-            android:textStyle="bold" />
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:text="@string/subtitulo_grafico"
-            android:textColor="@color/texto_secundario"
-            android:textSize="15sp" />
-
-        <TextView
-            android:id="@+id/tvConexionGrafico"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:layout_marginBottom="16dp"
-            android:text="@string/conexion_conectando"
-            android:textColor="@color/color_primario"
-            android:textSize="14sp"
-            android:textStyle="bold" />
-
-        <com.google.android.material.card.MaterialCardView
-            android:layout_width="match_parent"
-            android:layout_height="340dp"
-            app:cardBackgroundColor="@color/superficie"
-            app:cardCornerRadius="24dp"
-            app:cardElevation="2dp"
-            app:strokeColor="@color/borde"
-            app:strokeWidth="1dp">
-
-            <com.example.smartinsulinguardian.GraficoTemperaturaView
-                android:id="@+id/graficoTemperatura"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:padding="12dp" />
-        </com.google.android.material.card.MaterialCardView>
-
-        <com.google.android.material.card.MaterialCardView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            app:cardBackgroundColor="@color/superficie"
-            app:cardCornerRadius="20dp"
-            app:cardElevation="0dp"
-            app:strokeColor="@color/borde"
-            app:strokeWidth="1dp">
+            android:orientation="vertical">
 
             <TextView
-                android:id="@+id/tvUltimaLectura"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/etiqueta_historial"
+                android:textAppearance="@style/TextAppearance.Material3.LabelMedium"
+                android:textColor="@color/color_primario"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/tvTituloGrafico"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:padding="18dp"
-                android:text="@string/ultima_lectura_vacia"
+                android:layout_marginTop="@dimen/espaciado_8"
+                android:text="@string/titulo_grafico"
+                android:textAppearance="@style/TextAppearance.Material3.HeadlineSmall"
                 android:textColor="@color/texto_principal"
-                android:textSize="16sp"
                 android:textStyle="bold" />
-        </com.google.android.material.card.MaterialCardView>
-    </LinearLayout>
-</ScrollView>
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/espaciado_8"
+                android:text="@string/subtitulo_grafico"
+                android:textAppearance="@style/TextAppearance.Material3.BodyMedium"
+                android:textColor="@color/texto_secundario" />
+
+            <TextView
+                android:id="@+id/tvConexionGrafico"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/espaciado_12"
+                android:layout_marginBottom="@dimen/espaciado_16"
+                android:text="@string/conexion_conectando"
+                android:textAppearance="@style/TextAppearance.Material3.LabelLarge"
+                android:textColor="@color/color_primario"
+                android:textStyle="bold" />
+
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="@dimen/altura_grafico"
+                app:cardBackgroundColor="@color/superficie"
+                app:cardCornerRadius="@dimen/radio_tarjeta"
+                app:cardElevation="@dimen/elevacion_tarjeta"
+                app:strokeColor="@color/borde"
+                app:strokeWidth="@dimen/grosor_borde">
+
+                <com.example.smartinsulinguardian.GraficoTemperaturaView
+                    android:id="@+id/graficoTemperatura"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:padding="@dimen/espaciado_12" />
+            </com.google.android.material.card.MaterialCardView>
+
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/espaciado_16"
+                app:cardBackgroundColor="@color/superficie"
+                app:cardCornerRadius="@dimen/radio_tarjeta_secundaria"
+                app:cardElevation="@dimen/sin_elevacion"
+                app:strokeColor="@color/borde"
+                app:strokeWidth="@dimen/grosor_borde">
+
+                <TextView
+                    android:id="@+id/tvUltimaLectura"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:padding="@dimen/espaciado_16"
+                    android:text="@string/ultima_lectura_vacia"
+                    android:textAppearance="@style/TextAppearance.Material3.BodyLarge"
+                    android:textColor="@color/texto_principal"
+                    android:textStyle="bold" />
+            </com.google.android.material.card.MaterialCardView>
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
+</androidx.constraintlayout.widget.ConstraintLayout>

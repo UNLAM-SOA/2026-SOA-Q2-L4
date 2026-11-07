@@ -38,10 +38,12 @@ public class GraficoTemperaturaView extends View {
     private static final float LIMITE_TEMP_MIN_C = 2f;
     private static final float LIMITE_TEMP_MAX_C = 8f;
 
-    private static final float MARGEN_IZQUIERDO_DP = 40f;
+    private static final float MARGEN_IZQUIERDO_DP = 52f;
     private static final float MARGEN_SUPERIOR_DP = 16f;
     private static final float MARGEN_DERECHO_DP = 16f;
-    private static final float MARGEN_INFERIOR_DP = 32f;
+    private static final float MARGEN_INFERIOR_DP = 52f;
+    private static final float MARGEN_ETIQUETA_EJE_DP = 16f;
+    private static final float MARGEN_ETIQUETA_EJE_X_DP = 44f;
     private static final float SEPARACION_TEXTO_DP = 6f;
 
     private static final float GROSOR_EJE_DP = 1f;
@@ -205,6 +207,18 @@ public class GraficoTemperaturaView extends View {
 
         canvas.drawLine(izquierda, arriba, izquierda, abajo, pincelEje);
         canvas.drawLine(izquierda, abajo, derecha, abajo, pincelEje);
+
+        pincelTexto.setTextAlign(Paint.Align.CENTER);
+        float centroY = (arriba + abajo) / 2f;
+        float ajusteCentroTexto = -(pincelTexto.ascent() + pincelTexto.descent()) / 2f;
+        canvas.save();
+        canvas.rotate(-90f, MARGEN_ETIQUETA_EJE_DP * densidad, centroY);
+        canvas.drawText(getContext().getString(R.string.eje_temperatura),
+                MARGEN_ETIQUETA_EJE_DP * densidad, centroY + ajusteCentroTexto, pincelTexto);
+        canvas.restore();
+        canvas.drawText(getContext().getString(R.string.eje_hora),
+                (izquierda + derecha) / 2f,
+                abajo + MARGEN_ETIQUETA_EJE_X_DP * densidad, pincelTexto);
     }
 
     /** Dibuja las lineas punteadas de los limites minimo y maximo con sus etiquetas. */
