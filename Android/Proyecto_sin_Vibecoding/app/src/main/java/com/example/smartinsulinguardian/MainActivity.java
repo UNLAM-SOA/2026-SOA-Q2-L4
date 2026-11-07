@@ -19,11 +19,14 @@ import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 
 import org.eclipse.paho.client.mqttv3.MqttClient;
+import org.eclipse.paho.client.mqttv3.IMqttDeliveryToken;
+import org.eclipse.paho.client.mqttv3.MqttCallbackExtended;
 import org.eclipse.paho.client.mqttv3.MqttConnectOptions;
 import org.eclipse.paho.client.mqttv3.MqttException;
 import org.eclipse.paho.client.mqttv3.MqttMessage;
 import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence;
 
+import java.nio.charset.StandardCharsets;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -57,14 +60,17 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
 
     private SensorManager sensorManager;
     private Sensor acelerometro;
+    private volatile boolean pantallaVisible;
     private int picos = 0;
     private long instanteUltimoPico = 0L;
     private long instanteUltimaAccion = 0L;
 
     private TextView tvEstado;
     private TextView tvTemperatura;
+    private TextView tvConexion;
     private Button btnSilenciar;
     private Button btnGrafico;
+    private MqttClient clienteDatos;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -81,21 +87,29 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     @Override
     protected void onResume() {
         super.onResume();
+        pantallaVisible = true;
+        tvEstado.setText(R.string.estado_inicial);
+        tvTemperatura.setText(R.string.temperatura_inicial);
+        actualizarEstadoConexion(R.string.conexion_conectando);
         if (acelerometro != null) {
             sensorManager.registerListener(this, acelerometro, SensorManager.SENSOR_DELAY_GAME);
         }
+        ejecutorMqtt.execute(this::conectarDatos);
     }
 
     @Override
     protected void onPause() {
         super.onPause();
+        pantallaVisible = false;
         sensorManager.unregisterListener(this);
+        ejecutorMqtt.execute(this::desconectarDatos);
     }
 
     /** Obtiene las referencias a las vistas definidas en el layout. */
     private void enlazarVistas() {
         tvEstado = findViewById(R.id.tvEstado);
         tvTemperatura = findViewById(R.id.tvTemperatura);
+        tvConexion = findViewById(R.id.tvConexion);
         btnSilenciar = findViewById(R.id.btnSilenciar);
         btnGrafico = findViewById(R.id.btnGrafico);
     }
@@ -175,7 +189,113 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        ejecutorMqtt.shutdownNow();
+        ejecutorMqtt.shutdown();
+    }
+
+    /** Conecta al broker y prepara la recepcion de estado y temperatura en segundo plano. */
+    private void conectarDatos() {
+        if (!pantallaVisible) {
+            return;
+        }
+        try {
+            MqttClient cliente = new MqttClient(ConfiguracionMqtt.BROKER_URI,
+                    MqttClient.generateClientId(), new MemoryPersistence());
+            clienteDatos = cliente;
+            cliente.setCallback(new ReceptorDatos(cliente));
+
+            MqttConnectOptions opciones = new MqttConnectOptions();
+            opciones.setCleanSession(true);
+            opciones.setAutomaticReconnect(true);
+            opciones.setConnectionTimeout(ConfiguracionMqtt.TIMEOUT_CONEXION_S);
+            cliente.connect(opciones);
+        } catch (MqttException e) {
+            desconectarDatos();
+            actualizarEstadoConexion(R.string.conexion_error);
+        }
+    }
+
+    /** Se suscribe a los topics de estado y temperatura al conectar o reconectar. */
+    private void suscribirDatos(MqttClient cliente) {
+        if (!pantallaVisible || clienteDatos != cliente || !cliente.isConnected()) {
+            return;
+        }
+        try {
+            cliente.subscribe(ConfiguracionMqtt.TOPIC_ESTADO, 0);
+            cliente.subscribe(ConfiguracionMqtt.TOPIC_TEMPERATURA, 0);
+            actualizarEstadoConexion(R.string.conexion_conectado);
+        } catch (MqttException e) {
+            actualizarEstadoConexion(R.string.conexion_error_suscripcion);
+        }
+    }
+
+    /** Desconecta el cliente de lectura cuando la pantalla deja de estar visible. */
+    private void desconectarDatos() {
+        MqttClient cliente = clienteDatos;
+        clienteDatos = null;
+        cerrarCliente(cliente);
+    }
+
+    /** Actualiza el indicador de conexion desde el hilo principal. */
+    private void actualizarEstadoConexion(int recursoTexto) {
+        runOnUiThread(() -> {
+            if (pantallaVisible) {
+                tvConexion.setText(recursoTexto);
+            }
+        });
+    }
+
+    /**
+     * Recibe los topics del dispositivo, analiza sus payloads y actualiza las vistas.
+     * Los eventos de Paho se procesan fuera del hilo principal.
+     */
+    private class ReceptorDatos implements MqttCallbackExtended {
+
+        private final MqttClient cliente;
+
+        ReceptorDatos(MqttClient cliente) {
+            this.cliente = cliente;
+        }
+
+        @Override
+        public void connectComplete(boolean reconexion, String uriServidor) {
+            if (!ejecutorMqtt.isShutdown()) {
+                ejecutorMqtt.execute(() -> suscribirDatos(cliente));
+            }
+        }
+
+        @Override
+        public void messageArrived(String topico, MqttMessage mensaje) {
+            String contenido = new String(mensaje.getPayload(), StandardCharsets.UTF_8).trim();
+            if (ConfiguracionMqtt.TOPIC_ESTADO.equals(topico)) {
+                runOnUiThread(() -> {
+                    if (pantallaVisible) {
+                        tvEstado.setText(getString(R.string.estado_actual, contenido));
+                    }
+                });
+                return;
+            }
+            if (ConfiguracionMqtt.TOPIC_TEMPERATURA.equals(topico)) {
+                try {
+                    float temperatura = Float.parseFloat(contenido);
+                    runOnUiThread(() -> {
+                        if (pantallaVisible) {
+                            tvTemperatura.setText(getString(R.string.temperatura_actual, temperatura));
+                        }
+                    });
+                } catch (NumberFormatException e) {
+                    actualizarEstadoConexion(R.string.conexion_dato_invalido);
+                }
+            }
+        }
+
+        @Override
+        public void connectionLost(Throwable causa) {
+            actualizarEstadoConexion(R.string.conexion_reconectando);
+        }
+
+        @Override
+        public void deliveryComplete(IMqttDeliveryToken token) {
+        }
     }
 
     /**

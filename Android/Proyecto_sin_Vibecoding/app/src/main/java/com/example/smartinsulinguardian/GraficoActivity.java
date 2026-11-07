@@ -2,7 +2,6 @@ package com.example.smartinsulinguardian;
 
 import android.os.Bundle;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
 
@@ -30,6 +29,8 @@ public class GraficoActivity extends AppCompatActivity {
 
     private GraficoTemperaturaView grafico;
     private TextView tvUltimaLectura;
+    private TextView tvConexion;
+    private volatile boolean pantallaVisible;
 
     private final SimpleDateFormat formatoHora =
             new SimpleDateFormat(GraficoTemperaturaView.FORMATO_HORA, Locale.getDefault());
@@ -45,17 +46,21 @@ public class GraficoActivity extends AppCompatActivity {
 
         grafico = findViewById(R.id.graficoTemperatura);
         tvUltimaLectura = findViewById(R.id.tvUltimaLectura);
+        tvConexion = findViewById(R.id.tvConexionGrafico);
     }
 
     @Override
     protected void onResume() {
         super.onResume();
+        pantallaVisible = true;
+        tvConexion.setText(R.string.conexion_conectando);
         ejecutorMqtt.execute(this::conectar);
     }
 
     @Override
     protected void onPause() {
         super.onPause();
+        pantallaVisible = false;
         ejecutorMqtt.execute(this::desconectar);
     }
 
@@ -82,8 +87,7 @@ public class GraficoActivity extends AppCompatActivity {
             cliente.connect(opciones);
         } catch (MqttException e) {
             desconectar();
-            runOnUiThread(() -> Toast.makeText(this,
-                    R.string.msg_error_conexion_broker, Toast.LENGTH_SHORT).show());
+            actualizarEstadoConexion(R.string.conexion_error);
         }
     }
 
@@ -92,10 +96,20 @@ public class GraficoActivity extends AppCompatActivity {
         try {
             if (cliente != null && cliente.isConnected()) {
                 cliente.subscribe(ConfiguracionMqtt.TOPIC_TEMPERATURA, MQTT_QOS);
+                actualizarEstadoConexion(R.string.conexion_conectado);
             }
         } catch (MqttException ignorada) {
-            // Se reintenta en la proxima reconexion.
+            actualizarEstadoConexion(R.string.conexion_error_suscripcion);
         }
+    }
+
+    /** Actualiza el indicador de conexion desde el hilo principal. */
+    private void actualizarEstadoConexion(int recursoTexto) {
+        runOnUiThread(() -> {
+            if (pantallaVisible) {
+                tvConexion.setText(recursoTexto);
+            }
+        });
     }
 
     /** Desconecta y libera el cliente MQTT, ignorando errores al cerrar. */
@@ -122,7 +136,9 @@ public class GraficoActivity extends AppCompatActivity {
 
         @Override
         public void connectComplete(boolean reconexion, String uriServidor) {
-            ejecutorMqtt.execute(GraficoActivity.this::suscribir);
+            if (!ejecutorMqtt.isShutdown()) {
+                ejecutorMqtt.execute(GraficoActivity.this::suscribir);
+            }
         }
 
         @Override
@@ -131,6 +147,7 @@ public class GraficoActivity extends AppCompatActivity {
             try {
                 temperatura = Float.parseFloat(new String(mensaje.getPayload()).trim());
             } catch (NumberFormatException e) {
+                actualizarEstadoConexion(R.string.conexion_dato_invalido);
                 return;
             }
             runOnUiThread(() -> agregarLectura(temperatura));
@@ -138,7 +155,7 @@ public class GraficoActivity extends AppCompatActivity {
 
         @Override
         public void connectionLost(Throwable causa) {
-            // La reconexion automatica de Paho se encarga de volver a conectar.
+            actualizarEstadoConexion(R.string.conexion_reconectando);
         }
 
         @Override

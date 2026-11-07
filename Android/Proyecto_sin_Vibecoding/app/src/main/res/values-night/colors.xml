@@ -1,0 +1,9 @@
+<resources>
+    <color name="color_primario">#82D4B8</color>
+    <color name="fondo_app">#101A18</color>
+    <color name="superficie">#1B2926</color>
+    <color name="texto_principal">#E2F0EA</color>
+    <color name="texto_secundario">#A5B9B1</color>
+    <color name="borde">#30423D</color>
+    <color name="fondo_estado">#263D35</color>
+</resources>

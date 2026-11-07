@@ -1,5 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="black">#FF000000</color>
-    <color name="white">#FFFFFFFF</color>
+    <color name="color_primario">#176B5B</color>
+    <color name="fondo_app">#F3F7F5</color>
+    <color name="superficie">#FFFFFF</color>
+    <color name="texto_principal">#17332F</color>
+    <color name="texto_secundario">#60736F</color>
+    <color name="borde">#DCE7E2</color>
+    <color name="fondo_estado">#E5F3EE</color>
 </resources>

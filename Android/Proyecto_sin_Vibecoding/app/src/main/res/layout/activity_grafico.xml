@@ -1,29 +1,89 @@
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:padding="24dp">
+    android:background="@color/fondo_app"
+    android:fillViewport="true">
 
-    <TextView
-        android:id="@+id/tvTituloGrafico"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginBottom="16dp"
-        android:text="@string/titulo_grafico"
-        android:textSize="20sp"
-        android:textStyle="bold" />
-
-    <com.example.smartinsulinguardian.GraficoTemperaturaView
-        android:id="@+id/graficoTemperatura"
+    <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1" />
-
-    <TextView
-        android:id="@+id/tvUltimaLectura"
-        android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginTop="16dp"
-        android:text="@string/ultima_lectura_vacia"
-        android:textSize="18sp" />
-</LinearLayout>
+        android:orientation="vertical"
+        android:padding="24dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/etiqueta_historial"
+            android:textColor="@color/color_primario"
+            android:textSize="12sp"
+            android:textStyle="bold"
+            android:letterSpacing="0.12" />
+
+        <TextView
+            android:id="@+id/tvTituloGrafico"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="@string/titulo_grafico"
+            android:textColor="@color/texto_principal"
+            android:textSize="26sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="@string/subtitulo_grafico"
+            android:textColor="@color/texto_secundario"
+            android:textSize="15sp" />
+
+        <TextView
+            android:id="@+id/tvConexionGrafico"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:layout_marginBottom="16dp"
+            android:text="@string/conexion_conectando"
+            android:textColor="@color/color_primario"
+            android:textSize="14sp"
+            android:textStyle="bold" />
+
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="340dp"
+            app:cardBackgroundColor="@color/superficie"
+            app:cardCornerRadius="24dp"
+            app:cardElevation="2dp"
+            app:strokeColor="@color/borde"
+            app:strokeWidth="1dp">
+
+            <com.example.smartinsulinguardian.GraficoTemperaturaView
+                android:id="@+id/graficoTemperatura"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:padding="12dp" />
+        </com.google.android.material.card.MaterialCardView>
+
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            app:cardBackgroundColor="@color/superficie"
+            app:cardCornerRadius="20dp"
+            app:cardElevation="0dp"
+            app:strokeColor="@color/borde"
+            app:strokeWidth="1dp">
+
+            <TextView
+                android:id="@+id/tvUltimaLectura"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:padding="18dp"
+                android:text="@string/ultima_lectura_vacia"
+                android:textColor="@color/texto_principal"
+                android:textSize="16sp"
+                android:textStyle="bold" />
+        </com.google.android.material.card.MaterialCardView>
+    </LinearLayout>
+</ScrollView>

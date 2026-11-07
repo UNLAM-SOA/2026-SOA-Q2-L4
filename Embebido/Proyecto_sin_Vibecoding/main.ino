@@ -28,7 +28,7 @@
 #define DELAY_1000_MS 1000
 #define FRECUENCIA_BUZZER_HZ 1000
 #define CANTIDAD_SENSORES_TEMPERATURA 1
-#define INTERVALO_PUBLICACION_MQTT_MS 10000 //intervalo para publicar via mqtt
+#define INTERVALO_PUBLICACION_MQTT_MS 2000 //publica la temperatura cada 2 segundos
 #define INTERVALO_REINTENTO_MQTT_MS   10000
 #define DELAY_TAREA_MQTT_MS           10
 #define MQTT_RETENER_MENSAJE          true //el broker guarda el ultimo estado para quien se suscriba despues
@@ -85,9 +85,11 @@ volatile bool estado_pendiente_publicar = true;
 /*------------------------ FIN DECLARACION VARIABLES GLOBALES ------------------------*/
 
 /*------------------------ INICIO DECLARACION VARIABLES PARA LA COMUNICACION MQTT ------------------------*/
-// WIFI WOKWI
-const char* WIFI_SSID = "SO Avanzados";
-const char* WIFI_PASSWORD = "SOA.2019";
+// WIFI AULA / WOKWI
+//const char* WIFI_SSID = "SO Avanzados";
+//const char* WIFI_PASSWORD = "SOA.2019";
+const char* WIFI_SSID = "Wokwi-GUEST";
+const char* WIFI_PASSWORD = "";
 
 // MQTT
 const char* MQTT_SERVER = "broker.emqx.io";

@@ -1,8 +1,22 @@
 <resources>
     <string name="app_name">Smart Insulin Guardian</string>
     <string name="titulo_principal">Smart Insulin Guardian</string>
-    <string name="estado_inicial">Estado: --</string>
-    <string name="temperatura_inicial">Temperatura: -- °C</string>
+    <string name="etiqueta_monitoreo">MONITOREO DEL CONSERVADOR</string>
+    <string name="subtitulo_principal">Estado y temperatura de tu almacenamiento de insulina.</string>
+    <string name="etiqueta_estado">ESTADO DEL SISTEMA</string>
+    <string name="etiqueta_temperatura">TEMPERATURA ACTUAL</string>
+    <string name="etiqueta_control">Control de alarma</string>
+    <string name="ayuda_sacudida">También podés sacudir el celular para alternar la alarma.</string>
+    <string name="estado_inicial">Esperando estado del dispositivo…</string>
+    <string name="estado_actual">Estado: %1$s</string>
+    <string name="temperatura_inicial">Esperando lectura del sensor…</string>
+    <string name="temperatura_actual">%1$.1f °C</string>
+    <string name="conexion_conectando">Conectando al broker MQTT…</string>
+    <string name="conexion_conectado">Broker MQTT conectado</string>
+    <string name="conexion_reconectando">Conexión perdida; intentando reconectar…</string>
+    <string name="conexion_error">No se pudo conectar al broker MQTT</string>
+    <string name="conexion_error_suscripcion">Conectado, pero no se pudieron suscribir los datos</string>
+    <string name="conexion_dato_invalido">Se recibió una lectura de temperatura no válida</string>
     <string name="boton_silenciar">Silenciar alarma</string>
     <string name="boton_grafico">Ver gráfico de temperatura</string>
     <string name="boton_reactivar">Reactivar alarma</string>
@@ -10,7 +24,9 @@
     <string name="msg_error_broker">No se pudo enviar el comando al broker</string>
     <string name="msg_error_conexion_broker">No se pudo conectar al broker</string>
     <string name="titulo_grafico">Temperatura (últimas lecturas)</string>
-    <string name="ultima_lectura_vacia">Última lectura: -- °C</string>
+    <string name="etiqueta_historial">HISTORIAL TÉRMICO</string>
+    <string name="subtitulo_grafico">Seguimiento de las lecturas recibidas desde el dispositivo.</string>
+    <string name="ultima_lectura_vacia">Esperando la primera lectura de temperatura…</string>
     <string name="ultima_lectura">Última lectura: %1$.1f °C (%2$s)</string>
     <string name="etiqueta_limite_max">Máx %1$.0f °C</string>
     <string name="sin_datos_grafico">Sin datos</string>

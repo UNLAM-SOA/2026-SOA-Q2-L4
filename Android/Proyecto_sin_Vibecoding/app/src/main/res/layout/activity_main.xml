@@ -1,45 +1,162 @@
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:gravity="center_horizontal"
-    android:orientation="vertical"
-    android:padding="24dp">
+    android:background="@color/fondo_app"
+    android:fillViewport="true">
 
-    <TextView
-        android:id="@+id/tvTitulo"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginBottom="32dp"
-        android:text="@string/titulo_principal"
-        android:textSize="24sp"
-        android:textStyle="bold" />
-
-    <TextView
-        android:id="@+id/tvEstado"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginBottom="16dp"
-        android:text="@string/estado_inicial"
-        android:textSize="18sp" />
-
-    <TextView
-        android:id="@+id/tvTemperatura"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginBottom="32dp"
-        android:text="@string/temperatura_inicial"
-        android:textSize="18sp" />
-
-    <Button
-        android:id="@+id/btnSilenciar"
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginBottom="16dp"
-        android:text="@string/boton_silenciar" />
+        android:orientation="vertical"
+        android:padding="24dp">
 
-    <Button
-        android:id="@+id/btnGrafico"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="@string/boton_grafico" />
-</LinearLayout>
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/etiqueta_monitoreo"
+            android:textColor="@color/color_primario"
+            android:textSize="12sp"
+            android:textStyle="bold"
+            android:letterSpacing="0.12" />
+
+        <TextView
+            android:id="@+id/tvTitulo"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="@string/titulo_principal"
+            android:textColor="@color/texto_principal"
+            android:textSize="30sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="@string/subtitulo_principal"
+            android:textColor="@color/texto_secundario"
+            android:textSize="16sp" />
+
+        <TextView
+            android:id="@+id/tvConexion"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:layout_marginBottom="20dp"
+            android:text="@string/conexion_conectando"
+            android:textColor="@color/color_primario"
+            android:textSize="14sp"
+            android:textStyle="bold" />
+
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            app:cardBackgroundColor="@color/superficie"
+            app:cardCornerRadius="24dp"
+            app:cardElevation="2dp"
+            app:strokeColor="@color/borde"
+            app:strokeWidth="1dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="20dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/etiqueta_estado"
+                    android:textColor="@color/texto_secundario"
+                    android:textSize="12sp"
+                    android:textStyle="bold"
+                    android:letterSpacing="0.08" />
+
+                <TextView
+                    android:id="@+id/tvEstado"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:background="@drawable/fondo_estado"
+                    android:paddingStart="12dp"
+                    android:paddingTop="8dp"
+                    android:paddingEnd="12dp"
+                    android:paddingBottom="8dp"
+                    android:text="@string/estado_inicial"
+                    android:textColor="@color/color_primario"
+                    android:textSize="16sp"
+                    android:textStyle="bold" />
+
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:layout_marginTop="20dp"
+                    android:layout_marginBottom="20dp"
+                    android:background="@color/borde" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/etiqueta_temperatura"
+                    android:textColor="@color/texto_secundario"
+                    android:textSize="12sp"
+                    android:textStyle="bold"
+                    android:letterSpacing="0.08" />
+
+                <TextView
+                    android:id="@+id/tvTemperatura"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:text="@string/temperatura_inicial"
+                    android:textColor="@color/texto_principal"
+                    android:textSize="28sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:layout_marginBottom="12dp"
+            android:text="@string/etiqueta_control"
+            android:textColor="@color/texto_principal"
+            android:textSize="18sp"
+            android:textStyle="bold" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnSilenciar"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:text="@string/boton_silenciar"
+            android:textAllCaps="false"
+            android:textSize="16sp"
+            app:backgroundTint="@color/color_primario"
+            app:cornerRadius="16dp" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnGrafico"
+            style="@style/Widget.Material3.Button.OutlinedButton"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:layout_marginTop="12dp"
+            android:text="@string/boton_grafico"
+            android:textAllCaps="false"
+            android:textColor="@color/color_primario"
+            android:textSize="16sp"
+            app:cornerRadius="16dp"
+            app:strokeColor="@color/color_primario" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:gravity="center"
+            android:text="@string/ayuda_sacudida"
+            android:textColor="@color/texto_secundario"
+            android:textSize="14sp" />
+    </LinearLayout>
+</ScrollView>

@@ -1,8 +1,15 @@
-<resources xmlns:tools="http://schemas.android.com/tools">
-    <!-- Base application theme. -->
+<resources>
     <style name="Base.Theme.SmartInsulinGuardian" parent="Theme.Material3.DayNight.NoActionBar">
-        <!-- Customize your light theme here. -->
-        <!-- <item name="colorPrimary">@color/my_light_primary</item> -->
+        <item name="colorPrimary">@color/color_primario</item>
+        <item name="colorOnPrimary">@color/superficie</item>
+        <item name="colorSecondary">@color/color_primario</item>
+        <item name="colorSurface">@color/superficie</item>
+        <item name="colorOnSurface">@color/texto_principal</item>
+        <item name="android:colorBackground">@color/fondo_app</item>
+        <item name="android:statusBarColor">@color/fondo_app</item>
+        <item name="android:navigationBarColor">@color/fondo_app</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar">true</item>
     </style>
 
     <style name="Theme.SmartInsulinGuardian" parent="Base.Theme.SmartInsulinGuardian" />
