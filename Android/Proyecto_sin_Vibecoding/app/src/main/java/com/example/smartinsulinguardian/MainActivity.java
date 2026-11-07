@@ -85,6 +85,7 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+        AjusteBarrasSistema.aplicar(this);
 
         enlazarVistas();
         actualizarDisponibilidadComandos();
