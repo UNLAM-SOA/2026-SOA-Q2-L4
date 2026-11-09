@@ -143,6 +143,7 @@ public class GraficoTemperaturaView extends View {
      * Agrega una lectura de temperatura (grados Celsius) con su marca de tiempo
      * (milisegundos desde epoch) y redibuja. Conserva las ultimas MAX_PUNTOS.
      */
+    //borrar
     public void agregarValor(float temperatura, long marcaTiempoMs) {
         lecturas.add(new Lectura(temperatura, marcaTiempoMs));
         totalLecturas++;
@@ -150,6 +151,27 @@ public class GraficoTemperaturaView extends View {
         if (lecturas.size() > MAX_PUNTOS) {
             lecturas.remove(0);
         }
+        invalidate();
+    }
+
+    public void mostrarHistorial(List<LecturaTemperatura> historial) {
+
+        lecturas.clear();
+
+        //calculamos cuantos puntos vamos a dibujar
+        int inicio = Math.max(0, historial.size() - MAX_PUNTOS);
+
+        for (int i = inicio; i < historial.size(); i++) {
+            LecturaTemperatura lectura = historial.get(i);
+
+            lecturas.add(new Lectura(
+                    lectura.getTemperatura(),
+                    lectura.getMarcaTiempoMs()
+            ));
+        }
+
+        totalLecturas = lecturas.size();
+
         invalidate();
     }
 
