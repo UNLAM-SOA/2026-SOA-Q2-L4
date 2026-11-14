@@ -34,6 +34,12 @@ import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+import android.Manifest;
+import android.content.pm.PackageManager;
+import android.os.Build;
+
+import androidx.core.app.ActivityCompat;
+
 /**
  * Pantalla principal: muestra el estado y la temperatura del sistema embebido,
  * permite silenciar la alarma y navegar al grafico de temperatura.
@@ -42,6 +48,7 @@ import java.util.concurrent.Executors;
  */
 public class MainActivity extends AppCompatActivity implements SensorEventListener {
 
+    private static final int SOLICITUD_NOTIFICACIONES = 1001;
     private static final String COMANDO_SILENCIAR = "SILENCIAR";
     private static final String COMANDO_REACTIVAR = "REACTIVAR";
     private static final int MQTT_QOS = 1;
@@ -86,6 +93,9 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
         AjusteBarrasSistema.aplicar(this);
+
+        solicitarPermisoNotificaciones();
+        iniciarServicioMqtt();
 
         enlazarVistas();
         actualizarDisponibilidadComandos();
@@ -453,5 +463,27 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     private void abrirGrafico() {
         Intent intent = new Intent(this, GraficoActivity.class);
         startActivity(intent);
+    }
+
+    private void iniciarServicioMqtt() {
+        Intent intent = new Intent(this, MqttManagerService.class);
+        ContextCompat.startForegroundService(this, intent);
+    }
+
+    private void solicitarPermisoNotificaciones() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+                && ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.POST_NOTIFICATIONS
+        ) != PackageManager.PERMISSION_GRANTED) {
+
+            ActivityCompat.requestPermissions(
+                    this,
+                    new String[]{
+                            Manifest.permission.POST_NOTIFICATIONS
+                    },
+                    SOLICITUD_NOTIFICACIONES
+            );
+        }
     }
 }
