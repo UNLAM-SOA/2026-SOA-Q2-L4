@@ -2,11 +2,17 @@ package com.example.smartinsulinguardian;
 
 import android.app.Service;
 import android.content.Intent;
-import android.os.Binder;
 import android.os.IBinder;
 import android.util.Log;
+import android.app.Notification;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
+import android.app.PendingIntent;
+import android.content.pm.ServiceInfo;
+import android.os.Build;
 
 import androidx.annotation.Nullable;
+import androidx.core.app.NotificationCompat;
 
 import org.eclipse.paho.client.mqttv3.IMqttDeliveryToken;
 import org.eclipse.paho.client.mqttv3.MqttCallbackExtended;
@@ -22,6 +28,10 @@ import java.util.concurrent.RejectedExecutionException;
 
 public class MqttManagerService extends Service {
 
+    private static final String CANAL_MONITOREO =
+            "canal_monitoreo_temperatura";
+
+    private static final int ID_NOTIFICACION_MONITOREO = 100;
     private static final String TAG = "MQTT";
     private static final int MQTT_QOS = 0;
 
@@ -32,36 +42,28 @@ public class MqttManagerService extends Service {
 
     private MqttClient cliente;
 
-    // Binder para permitir conexiones locales al servicio.
-    private final IBinder binder = new LocalBinder();
-
-    public class LocalBinder extends Binder {
-
-        public MqttManagerService getService() {
-            return MqttManagerService.this;
-        }
-    }
-
     @Override
     public void onCreate() {
         super.onCreate();
 
-        Log.d(TAG, "Servicio MQTT creado");
+        crearCanalNotificacion();
+        iniciarEnPrimerPlano();
+
+        Log.d(TAG, "Servicio MQTT foreground creado");
 
         ejecutorMqtt.execute(this::conectar);
+    }
+
+    @Override
+    public int onStartCommand(Intent intent, int flags, int startId) {
+        Log.d(TAG, "Servicio MQTT iniciado");
+        return START_STICKY;
     }
 
     @Nullable
     @Override
     public IBinder onBind(Intent intent) {
-        Log.d(TAG, "Aplicación vinculada al servicio");
-        return binder;
-    }
-
-    @Override
-    public boolean onUnbind(Intent intent) {
-        Log.d(TAG, "Aplicación desvinculada del servicio");
-        return super.onUnbind(intent);
+        return null;
     }
 
     @Override
@@ -72,6 +74,8 @@ public class MqttManagerService extends Service {
 
         ejecutorMqtt.execute(this::desconectar);
         ejecutorMqtt.shutdown();
+
+        stopForeground(STOP_FOREGROUND_REMOVE);
 
         super.onDestroy();
     }
@@ -163,6 +167,85 @@ public class MqttManagerService extends Service {
         }
     }
 
+
+    private void crearCanalNotificacion() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+            return;
+        }
+
+        NotificationChannel canal = new NotificationChannel(
+                CANAL_MONITOREO,
+                getString(R.string.canal_monitoreo_nombre),
+                NotificationManager.IMPORTANCE_LOW
+        );
+
+        canal.setDescription(
+                getString(R.string.notificacion_monitoreo_texto)
+        );
+
+        NotificationManager notificationManager =
+                getSystemService(NotificationManager.class);
+
+        notificationManager.createNotificationChannel(canal);
+    }
+
+    private void iniciarEnPrimerPlano() {
+        Intent intentAbrirApp =
+                new Intent(this, MainActivity.class);
+
+        intentAbrirApp.setFlags(
+                Intent.FLAG_ACTIVITY_CLEAR_TOP
+                        | Intent.FLAG_ACTIVITY_SINGLE_TOP
+        );
+
+        PendingIntent pendingIntent = PendingIntent.getActivity(
+                this,
+                0,
+                intentAbrirApp,
+                PendingIntent.FLAG_UPDATE_CURRENT
+                        | PendingIntent.FLAG_IMMUTABLE
+        );
+
+        Notification notificacion =
+                new NotificationCompat.Builder(
+                        this,
+                        CANAL_MONITOREO
+                )
+                        .setSmallIcon(R.drawable.ic_estado)
+                        .setContentTitle(
+                                getString(
+                                        R.string.notificacion_monitoreo_titulo
+                                )
+                        )
+                        .setContentText(
+                                getString(
+                                        R.string.notificacion_monitoreo_texto
+                                )
+                        )
+                        .setContentIntent(pendingIntent)
+                        .setOngoing(true)
+                        .setCategory(
+                                NotificationCompat.CATEGORY_SERVICE
+                        )
+                        .setPriority(
+                                NotificationCompat.PRIORITY_LOW
+                        )
+                        .build();
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            startForeground(
+                    ID_NOTIFICACION_MONITOREO,
+                    notificacion,
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
+            );
+        } else {
+            startForeground(
+                    ID_NOTIFICACION_MONITOREO,
+                    notificacion
+            );
+        }
+    }
+
     /**
      * Recibe los eventos del cliente MQTT.
      */
@@ -232,5 +315,6 @@ public class MqttManagerService extends Service {
         public void deliveryComplete(IMqttDeliveryToken token) {
             // Este servicio no publica mensajes.
         }
+
     }
 }

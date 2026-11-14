@@ -39,4 +39,7 @@
     <string name="titulo_dialogo_sacudida">¡Nueva función!</string>
     <string name="mensaje_dialogo_sacudida">Sacudí el celular para silenciar o reactivar la alarma, sin necesidad de tocar el botón.</string>
     <string name="boton_entendido">Entendido</string>
+    <string name="canal_monitoreo_nombre">Monitoreo de temperatura</string>
+    <string name="notificacion_monitoreo_titulo">Smart Insulin Guardian</string>
+    <string name="notificacion_monitoreo_texto">Recibiendo temperaturas del dispositivo</string>
 </resources>
