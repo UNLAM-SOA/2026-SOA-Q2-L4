@@ -200,24 +200,12 @@ transition state_table[MAX_STATES][MAX_EVENTS] =
 };
 
 /* Actualiza el estado pendiente de publicacion bajo proteccion del mutex. */
-bool actualizar_estado_para_publicar(states estado)
+void actualizar_estado_para_publicar(states estado)
 {
-    if(xSemaphoreTake(mutexDatosCompartidos, portMAX_DELAY) != pdTRUE)
-    {
-        Serial.println("ERROR: no se pudo tomar el mutex de datos compartidos");
-        return false;
-    }
-
+    xSemaphoreTake(mutexDatosCompartidos, portMAX_DELAY);
     estado_para_publicar = estado;
     estado_pendiente_publicar = true;
-
-    if(xSemaphoreGive(mutexDatosCompartidos) != pdTRUE)
-    {
-        Serial.println("ERROR: no se pudo liberar el mutex de datos compartidos");
-        return false;
-    }
-
-    return true;
+    xSemaphoreGive(mutexDatosCompartidos);
 }
 
 /* Espera un evento de la cola (bloqueante) y lo guarda en new_event. */
@@ -353,20 +341,10 @@ void leer_sensor_temperatura(void* p)
         {
             value = sensor_temperatura.getTempCByIndex(INDICE_SENSOR_TEMPERATURA);
 
-            if(xSemaphoreTake(mutexDatosCompartidos, portMAX_DELAY) == pdTRUE)
-            {
-                ultima_temperatura = value;
-                temperatura_disponible = true;
-
-                if(xSemaphoreGive(mutexDatosCompartidos) != pdTRUE)
-                {
-                    Serial.println("ERROR: no se pudo liberar el mutex despues de guardar la temperatura");
-                }
-            }
-            else
-            {
-                Serial.println("ERROR: no se pudo tomar el mutex para guardar la temperatura");
-            }
+            xSemaphoreTake(mutexDatosCompartidos, portMAX_DELAY);
+            ultima_temperatura = value;
+            temperatura_disponible = true;
+            xSemaphoreGive(mutexDatosCompartidos);
 
             medicion_temperatura_en_curso = false;
             hay_evento = false;
@@ -521,29 +499,16 @@ void tarea_mqtt(void* p)
                 bool temperatura_disponible_local = false;
                 float ultima_temperatura_local = 0.0;
 
-                if(xSemaphoreTake(mutexDatosCompartidos, portMAX_DELAY) == pdTRUE)
+                xSemaphoreTake(mutexDatosCompartidos, portMAX_DELAY);
+                publicar_estado = estado_pendiente_publicar;
+                estado_local = estado_para_publicar;
+                if(publicar_estado)
                 {
-                    publicar_estado = estado_pendiente_publicar;
-                    estado_local = estado_para_publicar;
-                    if(publicar_estado)
-                    {
-                        estado_pendiente_publicar = false;
-                    }
-
-                    temperatura_disponible_local = temperatura_disponible;
-                    ultima_temperatura_local = ultima_temperatura;
-
-                    if(xSemaphoreGive(mutexDatosCompartidos) != pdTRUE)
-                    {
-                        Serial.println("ERROR: no se pudo liberar el mutex despues de leer datos de publicacion");
-                        publicar_estado = false;
-                        temperatura_disponible_local = false;
-                    }
+                    estado_pendiente_publicar = false;
                 }
-                else
-                {
-                    Serial.println("ERROR: no se pudo tomar el mutex para leer datos de publicacion");
-                }
+                temperatura_disponible_local = temperatura_disponible;
+                ultima_temperatura_local = ultima_temperatura;
+                xSemaphoreGive(mutexDatosCompartidos);
 
                 // Publicar el estado de la FSM cuando cambia
                 if(publicar_estado)
@@ -671,11 +636,7 @@ void setup()
         }
 
         a_seguro();
-        if(!actualizar_estado_para_publicar(current_state))
-        {
-            a_error();
-            return;
-        }
+        actualizar_estado_para_publicar(current_state);
 
         xTaskCreate(leer_sensor_magnetico, "sensor magnetico", TAMANIO_STACK_SENSORES, NULL, PRIORIDAD_TAREAS, NULL);
         xTaskCreate(leer_sensor_luz, "sensor luminico", TAMANIO_STACK_SENSORES, NULL, PRIORIDAD_TAREAS, NULL);
