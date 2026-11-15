@@ -49,6 +49,9 @@ public class GuardianApplication extends Application {
      */
     private volatile String ultimoComando = "REACTIVAR";
 
+    /** Controla si el dialogo explicativo de la sacudida ya se mostro en esta sesion. */
+    private boolean dialogoSacudidaMostrado = false;
+
     /** Acceso al historial compartido. */
     public HistorialTemperaturas getHistorialTemperaturas() {
         return historialTemperaturas;
@@ -87,6 +90,16 @@ public class GuardianApplication extends Application {
     /** Actualiza el ultimo comando enviado con exito. */
     public void setUltimoComando(String comando) {
         ultimoComando = comando;
+    }
+
+    /** Indica si el dialogo explicativo de sacudida ya fue mostrado en la sesion actual. */
+    public boolean fueDialogoSacudidaMostrado() {
+        return dialogoSacudidaMostrado;
+    }
+
+    /** Marca el dialogo explicativo de sacudida como mostrado en la sesion actual. */
+    public void marcarDialogoSacudidaMostrado() {
+        this.dialogoSacudidaMostrado = true;
     }
 
     /** Notifica una nueva version del historial a los observadores. */

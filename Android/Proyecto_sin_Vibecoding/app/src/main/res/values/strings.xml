@@ -21,8 +21,9 @@
     <string name="boton_silenciar">Silenciar alarma</string>
     <string name="boton_grafico">Ver gráfico de temperatura</string>
     <string name="boton_reactivar">Reactivar alarma</string>
-    <string name="msg_comando_enviado">Comando %1$s enviado</string>
-    <string name="msg_error_broker">No se pudo enviar la orden al dispositivo</string>
+    <string name="msg_alarma_silenciada">Alarma silenciada</string>
+    <string name="msg_alarma_reactivada">Alarma reactivada</string>
+    <string name="msg_error_broker">No se pudo comunicar con el dispositivo</string>
     <string name="msg_error_conexion_broker">No se pudo establecer conexión</string>
     <string name="titulo_grafico">Temperatura (últimas lecturas)</string>
     <string name="titulo_barra_grafico">Gráfico de temperatura</string>

@@ -182,11 +182,10 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         actualizarDisponibilidadComandos();
 
         if (resultado.isExitoso()) {
-            Toast.makeText(
-                    this,
-                    getString(R.string.msg_comando_enviado, resultado.getComando()),
-                    Toast.LENGTH_SHORT
-            ).show();
+            int recursoTexto = COMANDO_SILENCIAR.equals(resultado.getComando())
+                    ? R.string.msg_alarma_silenciada
+                    : R.string.msg_alarma_reactivada;
+            Toast.makeText(this, recursoTexto, Toast.LENGTH_SHORT).show();
         } else {
             Toast.makeText(this, R.string.msg_error_broker, Toast.LENGTH_SHORT).show();
         }
@@ -250,10 +249,15 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         servicioMqtt.publicarComando(comando);
     }
 
-    /** Envia la orden de silenciar y muestra la ayuda del sensor del celular. */
+    /** Envia la orden de silenciar y muestra la ayuda del sensor solo la primera vez en la sesion. */
     private void alTocarBotonSilenciar() {
         enviarComandoAlarma(COMANDO_SILENCIAR);
-        mostrarDialogoSacudida();
+
+        GuardianApplication app = (GuardianApplication) getApplication();
+        if (!app.fueDialogoSacudidaMostrado()) {
+            app.marcarDialogoSacudidaMostrado();
+            mostrarDialogoSacudida();
+        }
     }
 
     /** Muestra un dialogo con un celular animado que explica el gesto de sacudir. */
