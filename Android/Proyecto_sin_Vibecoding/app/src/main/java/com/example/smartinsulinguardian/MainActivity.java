@@ -1,6 +1,11 @@
 package com.example.smartinsulinguardian;
 
+import android.Manifest;
+import android.content.ComponentName;
+import android.content.Context;
 import android.content.Intent;
+import android.content.ServiceConnection;
+import android.content.pm.PackageManager;
 import android.content.res.ColorStateList;
 import android.graphics.drawable.Animatable;
 import android.graphics.drawable.Drawable;
@@ -8,7 +13,9 @@ import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
+import android.os.Build;
 import android.os.Bundle;
+import android.os.IBinder;
 import android.os.SystemClock;
 import android.view.View;
 import android.widget.ImageView;
@@ -17,63 +24,38 @@ import android.widget.Toast;
 
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 
 import com.google.android.material.button.MaterialButton;
 
-import org.eclipse.paho.client.mqttv3.MqttClient;
-import org.eclipse.paho.client.mqttv3.IMqttDeliveryToken;
-import org.eclipse.paho.client.mqttv3.MqttCallbackExtended;
-import org.eclipse.paho.client.mqttv3.MqttConnectOptions;
-import org.eclipse.paho.client.mqttv3.MqttException;
-import org.eclipse.paho.client.mqttv3.MqttMessage;
-import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence;
-
-import java.nio.charset.StandardCharsets;
 import java.util.Locale;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-
-import android.Manifest;
-import android.content.pm.PackageManager;
-import android.os.Build;
-
-import androidx.core.app.ActivityCompat;
 
 /**
  * Pantalla principal: muestra el estado y la temperatura del sistema embebido,
  * permite silenciar la alarma y navegar al grafico de temperatura.
  * Tanto el boton de alarma como sacudir el celular publican SILENCIAR / REACTIVAR
- * en el broker MQTT.
+ * a traves del MqttManagerService centralizado.
  */
 public class MainActivity extends AppCompatActivity implements SensorEventListener {
 
     private static final int SOLICITUD_NOTIFICACIONES = 1001;
     private static final String COMANDO_SILENCIAR = "SILENCIAR";
     private static final String COMANDO_REACTIVAR = "REACTIVAR";
-    private static final int MQTT_QOS = 1;
 
     private static final int INDICE_EJE_X = 0;
     private static final int INDICE_EJE_Y = 1;
     private static final int INDICE_EJE_Z = 2;
 
-    // Una sacudida son varios picos de aceleracion seguidos y separados entre si
+    // Parametros para deteccion de sacudida con acelerometro
     private static final float UMBRAL_SACUDIDA_G = 2.5f;
     private static final int PICOS_PARA_SACUDIDA = 3;
     private static final long SEPARACION_MIN_PICOS_MS = 100L;
     private static final long VENTANA_PICOS_MS = 800L;
     private static final long ESPERA_ENTRE_ACCIONES_MS = 1500L;
 
-    /** Hilo de fondo para no bloquear la UI con operaciones de red. */
-    private final ExecutorService ejecutorMqtt = Executors.newSingleThreadExecutor();
-    /** Ultimo comando enviado con exito; la alarma arranca activa. */
-    private String ultimoComando = COMANDO_REACTIVAR;
-
     private SensorManager sensorManager;
     private Sensor acelerometro;
-    private volatile boolean pantallaVisible;
-    private boolean brokerConectado;
-    private boolean envioComandoEnCurso;
     private int picos = 0;
     private long instanteUltimoPico = 0L;
     private long instanteUltimaAccion = 0L;
@@ -86,7 +68,28 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     private MaterialButton btnSilenciar;
     private MaterialButton btnReactivar;
     private MaterialButton btnGrafico;
-    private MqttClient clienteDatos;
+
+    private MqttManagerService servicioMqtt;
+    private boolean servicioEnlazado;
+    private EstadoConexion estadoConexionActual = EstadoConexion.CONECTANDO;
+    private boolean envioComandoEnCurso;
+
+    private final ServiceConnection conexionServicio = new ServiceConnection() {
+        @Override
+        public void onServiceConnected(ComponentName name, IBinder service) {
+            MqttManagerService.BinderLocal binder = (MqttManagerService.BinderLocal) service;
+            servicioMqtt = binder.getServicio();
+            servicioEnlazado = true;
+            actualizarDisponibilidadComandos();
+        }
+
+        @Override
+        public void onServiceDisconnected(ComponentName name) {
+            servicioMqtt = null;
+            servicioEnlazado = false;
+            actualizarDisponibilidadComandos();
+        }
+    };
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -98,36 +101,46 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         iniciarServicioMqtt();
 
         enlazarVistas();
-        actualizarDisponibilidadComandos();
         configurarBotones();
+        suscribirObservadores();
 
         sensorManager = (SensorManager) getSystemService(SENSOR_SERVICE);
-        acelerometro = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
+        if (sensorManager != null) {
+            acelerometro = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
+        }
+    }
+
+    @Override
+    protected void onStart() {
+        super.onStart();
+        Intent intentServicio = new Intent(this, MqttManagerService.class);
+        bindService(intentServicio, conexionServicio, Context.BIND_AUTO_CREATE);
+    }
+
+    @Override
+    protected void onStop() {
+        super.onStop();
+        if (servicioEnlazado) {
+            unbindService(conexionServicio);
+            servicioEnlazado = false;
+            servicioMqtt = null;
+        }
     }
 
     @Override
     protected void onResume() {
         super.onResume();
-        pantallaVisible = true;
-        tvEstado.setText(R.string.estado_inicial);
-        ivEstado.setImageTintList(ColorStateList.valueOf(
-                ContextCompat.getColor(this, R.color.color_primario)));
-        tvTemperatura.setText(R.string.temperatura_inicial);
-        brokerConectado = false;
-        envioComandoEnCurso = false;
-        actualizarEstadoConexion(R.string.conexion_conectando);
         if (acelerometro != null) {
             sensorManager.registerListener(this, acelerometro, SensorManager.SENSOR_DELAY_GAME);
         }
-        ejecutorMqtt.execute(this::conectarDatos);
     }
 
     @Override
     protected void onPause() {
         super.onPause();
-        pantallaVisible = false;
-        sensorManager.unregisterListener(this);
-        ejecutorMqtt.execute(this::desconectarDatos);
+        if (sensorManager != null) {
+            sensorManager.unregisterListener(this);
+        }
     }
 
     /** Obtiene las referencias a las vistas definidas en el layout. */
@@ -147,6 +160,117 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         btnSilenciar.setOnClickListener(v -> alTocarBotonSilenciar());
         btnReactivar.setOnClickListener(v -> enviarComandoAlarma(COMANDO_REACTIVAR));
         btnGrafico.setOnClickListener(v -> abrirGrafico());
+    }
+
+    /** Observa los LiveData provistos por GuardianApplication. */
+    private void suscribirObservadores() {
+        GuardianApplication app = (GuardianApplication) getApplication();
+
+        app.getEstadoConexionLiveData().observe(this, this::actualizarEstadoConexion);
+        app.getEstadoFsmLiveData().observe(this, this::actualizarVistaEstado);
+        app.getTemperaturaActualLiveData().observe(this, this::actualizarVistaTemperatura);
+        app.getResultadoComandoLiveData().observe(this, this::alRecibirResultadoComando);
+    }
+
+    /** Procesa el resultado de un comando enviado. */
+    private void alRecibirResultadoComando(ResultadoComando resultado) {
+        if (resultado == null || !resultado.consumir()) {
+            return;
+        }
+
+        envioComandoEnCurso = false;
+        actualizarDisponibilidadComandos();
+
+        if (resultado.isExitoso()) {
+            Toast.makeText(
+                    this,
+                    getString(R.string.msg_comando_enviado, resultado.getComando()),
+                    Toast.LENGTH_SHORT
+            ).show();
+        } else {
+            Toast.makeText(this, R.string.msg_error_broker, Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    /** Actualiza la vista de temperatura al recibir un nuevo valor. */
+    private void actualizarVistaTemperatura(Float temperatura) {
+        if (temperatura == null) {
+            tvTemperatura.setText(R.string.temperatura_inicial);
+            return;
+        }
+        tvTemperatura.setText(getString(R.string.temperatura_actual, temperatura));
+    }
+
+    /** Actualiza el texto y el color del icono segun el estado publicado por el embebido. */
+    private void actualizarVistaEstado(String estado) {
+        if (estado == null || estado.isEmpty()) {
+            tvEstado.setText(R.string.estado_inicial);
+            ivEstado.setImageTintList(ColorStateList.valueOf(
+                    ContextCompat.getColor(this, R.color.color_primario)));
+            return;
+        }
+
+        tvEstado.setText(getString(R.string.estado_actual, estado));
+        ivEstado.setImageTintList(ColorStateList.valueOf(
+                ContextCompat.getColor(this, obtenerColorEstado(estado))));
+    }
+
+    /** Actualiza el indicador de conexion con el broker. */
+    private void actualizarEstadoConexion(EstadoConexion estado) {
+        if (estado == null) {
+            return;
+        }
+
+        estadoConexionActual = estado;
+
+        int recursoTexto;
+        int recursoColor;
+
+        switch (estado) {
+            case CONECTADO:
+                recursoTexto = R.string.conexion_conectado;
+                recursoColor = R.color.conexion_conectado;
+                break;
+            case RECONECTANDO:
+                recursoTexto = R.string.conexion_reconectando;
+                recursoColor = R.color.conexion_conectando;
+                break;
+            case ERROR:
+                recursoTexto = R.string.conexion_error;
+                recursoColor = R.color.conexion_error;
+                break;
+            case CONECTANDO:
+            default:
+                recursoTexto = R.string.conexion_conectando;
+                recursoColor = R.color.conexion_conectando;
+                break;
+        }
+
+        tvConexion.setText(recursoTexto);
+        viewConexion.setBackgroundTintList(ColorStateList.valueOf(
+                ContextCompat.getColor(this, recursoColor)));
+
+        actualizarDisponibilidadComandos();
+    }
+
+    /** Habilita los comandos solo si el servicio esta enlazado, conectado y no hay envio activo. */
+    private void actualizarDisponibilidadComandos() {
+        boolean brokerConectado = (estadoConexionActual == EstadoConexion.CONECTADO);
+        boolean habilitados = servicioEnlazado && brokerConectado && !envioComandoEnCurso;
+        btnSilenciar.setEnabled(habilitados);
+        btnReactivar.setEnabled(habilitados);
+    }
+
+    /** Envia el comando solicitado al servicio MQTT. */
+    private void enviarComandoAlarma(String comando) {
+        if (!servicioEnlazado || servicioMqtt == null
+                || estadoConexionActual != EstadoConexion.CONECTADO || envioComandoEnCurso) {
+            return;
+        }
+
+        envioComandoEnCurso = true;
+        actualizarDisponibilidadComandos();
+        servicioMqtt.publicarComando(comando);
     }
 
     /** Envia la orden de silenciar y muestra la ayuda del sensor del celular. */
@@ -182,15 +306,12 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         evaluarSacudida(x, y, z, SystemClock.elapsedRealtime());
     }
 
-    /** Requerido por SensorEventListener; no se usa. */
     @Override
     public void onAccuracyChanged(Sensor sensor, int precision) {
     }
 
     /**
-     * Cuenta picos de aceleracion (fuerza total en G) y, cuando hay PICOS_PARA_SACUDIDA
-     * dentro de la ventana de tiempo, alterna la alarma. Tras cada accion se ignoran las
-     * sacudidas durante ESPERA_ENTRE_ACCIONES_MS para no alternar dos veces por un mismo gesto.
+     * Cuenta picos de aceleracion y alterna la alarma al detectar una sacudida.
      */
     private void evaluarSacudida(float x, float y, float z, long ahora) {
         float fuerzaG = (float) Math.sqrt(x * x + y * y + z * z) / SensorManager.GRAVITY_EARTH;
@@ -215,168 +336,17 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         }
     }
 
-    @Override
-    protected void onDestroy() {
-        super.onDestroy();
-        ejecutorMqtt.shutdown();
-    }
-
-    /** Conecta al broker y prepara la recepcion de estado y temperatura en segundo plano. */
-    private void conectarDatos() {
-        if (!pantallaVisible) {
-            return;
-        }
-        try {
-            MqttClient cliente = new MqttClient(ConfiguracionMqtt.BROKER_URI,
-                    MqttClient.generateClientId(), new MemoryPersistence());
-            clienteDatos = cliente;
-            cliente.setCallback(new ReceptorDatos(cliente));
-
-            MqttConnectOptions opciones = new MqttConnectOptions();
-            opciones.setCleanSession(true);
-            opciones.setAutomaticReconnect(true);
-            opciones.setConnectionTimeout(ConfiguracionMqtt.TIMEOUT_CONEXION_S);
-            cliente.connect(opciones);
-        } catch (MqttException e) {
-            desconectarDatos();
-            actualizarEstadoConexion(R.string.conexion_error);
-        }
-    }
-
-    /** Se suscribe a los topics de estado y temperatura al conectar o reconectar. */
-    private void suscribirDatos(MqttClient cliente) {
-        if (!pantallaVisible || clienteDatos != cliente || !cliente.isConnected()) {
-            return;
-        }
-        try {
-            cliente.subscribe(ConfiguracionMqtt.TOPIC_ESTADO, 0);
-            cliente.subscribe(ConfiguracionMqtt.TOPIC_TEMPERATURA, 0);
-            actualizarEstadoConexion(R.string.conexion_conectado);
-        } catch (MqttException e) {
-            actualizarEstadoConexion(R.string.conexion_error_suscripcion);
-        }
-    }
-
-    /** Desconecta el cliente de lectura cuando la pantalla deja de estar visible. */
-    private void desconectarDatos() {
-        MqttClient cliente = clienteDatos;
-        clienteDatos = null;
-        cerrarCliente(cliente);
-    }
-
-    /** Actualiza el indicador de conexion desde el hilo principal. */
-    private void actualizarEstadoConexion(int recursoTexto) {
-        runOnUiThread(() -> {
-            if (pantallaVisible) {
-                if (recursoTexto == R.string.conexion_conectado) {
-                    brokerConectado = true;
-                } else if (recursoTexto != R.string.conexion_dato_invalido) {
-                    brokerConectado = false;
-                }
-                tvConexion.setText(recursoTexto);
-                int colorConexion = brokerConectado
-                        ? R.color.conexion_conectado
-                        : (recursoTexto == R.string.conexion_conectando
-                        || recursoTexto == R.string.conexion_reconectando
-                        ? R.color.conexion_conectando : R.color.conexion_error);
-                viewConexion.setBackgroundTintList(ColorStateList.valueOf(
-                        ContextCompat.getColor(this, colorConexion)));
-                actualizarDisponibilidadComandos();
-            }
-        });
-    }
-
     /**
-     * Recibe los topics del dispositivo, analiza sus payloads y actualiza las vistas.
-     * Los eventos de Paho se procesan fuera del hilo principal.
-     */
-    private class ReceptorDatos implements MqttCallbackExtended {
-
-        private final MqttClient cliente;
-
-        ReceptorDatos(MqttClient cliente) {
-            this.cliente = cliente;
-        }
-
-        @Override
-        public void connectComplete(boolean reconexion, String uriServidor) {
-            if (!ejecutorMqtt.isShutdown()) {
-                ejecutorMqtt.execute(() -> suscribirDatos(cliente));
-            }
-        }
-
-        @Override
-        public void messageArrived(String topico, MqttMessage mensaje) {
-            String contenido = new String(mensaje.getPayload(), StandardCharsets.UTF_8).trim();
-            if (ConfiguracionMqtt.TOPIC_ESTADO.equals(topico)) {
-                runOnUiThread(() -> actualizarVistaEstado(contenido));
-                return;
-            }
-            if (ConfiguracionMqtt.TOPIC_TEMPERATURA.equals(topico)) {
-                try {
-                    float temperatura = Float.parseFloat(contenido);
-                    runOnUiThread(() -> {
-                        if (pantallaVisible) {
-                            tvTemperatura.setText(getString(R.string.temperatura_actual, temperatura));
-                        }
-                    });
-                } catch (NumberFormatException e) {
-                    actualizarEstadoConexion(R.string.conexion_dato_invalido);
-                }
-            }
-        }
-
-        @Override
-        public void connectionLost(Throwable causa) {
-            actualizarEstadoConexion(R.string.conexion_reconectando);
-        }
-
-        @Override
-        public void deliveryComplete(IMqttDeliveryToken token) {
-        }
-    }
-
-    /**
-     * Publica en el broker el comando opuesto al ultimo enviado:
-     * SILENCIAR si la alarma estaba reactivada, REACTIVAR si estaba silenciada.
-     * Se ignora si todavia hay un envio en curso.
+     * Alterna la alarma segun el ultimo comando registrado en GuardianApplication.
      */
     private void alSilenciarAlarma() {
-        if (!brokerConectado || envioComandoEnCurso) {
+        if (!servicioEnlazado || estadoConexionActual != EstadoConexion.CONECTADO || envioComandoEnCurso) {
             return;
         }
-        String comando = COMANDO_REACTIVAR.equals(ultimoComando) ? COMANDO_SILENCIAR : COMANDO_REACTIVAR;
-        enviarComandoAlarma(comando);
-    }
-
-    /** Envia el comando solicitado y deshabilita ambos botones durante el envio. */
-    private void enviarComandoAlarma(String comando) {
-        if (!brokerConectado || envioComandoEnCurso) {
-            return;
-        }
-        envioComandoEnCurso = true;
-        actualizarDisponibilidadComandos();
-        ejecutorMqtt.execute(() -> {
-            boolean enviado = publicarComando(comando);
-            runOnUiThread(() -> alFinalizarEnvio(comando, enviado));
-        });
-    }
-
-    /** Habilita los comandos solo mientras el broker esta conectado y no hay un envio activo. */
-    private void actualizarDisponibilidadComandos() {
-        boolean habilitados = brokerConectado && !envioComandoEnCurso;
-        btnSilenciar.setEnabled(habilitados);
-        btnReactivar.setEnabled(habilitados);
-    }
-
-    /** Actualiza el texto y el color del icono segun el estado publicado por el embebido. */
-    private void actualizarVistaEstado(String estado) {
-        if (!pantallaVisible) {
-            return;
-        }
-        tvEstado.setText(getString(R.string.estado_actual, estado));
-        ivEstado.setImageTintList(ColorStateList.valueOf(
-                ContextCompat.getColor(this, obtenerColorEstado(estado))));
+        GuardianApplication app = (GuardianApplication) getApplication();
+        String ultimo = app.getUltimoComando();
+        String nuevoComando = COMANDO_REACTIVAR.equals(ultimo) ? COMANDO_SILENCIAR : COMANDO_REACTIVAR;
+        enviarComandoAlarma(nuevoComando);
     }
 
     /** Asocia el estado MQTT con el color que representa al estado del dispositivo. */
@@ -411,65 +381,19 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         return R.color.color_primario;
     }
 
-    /** Se conecta al broker, publica el comando y se desconecta. Devuelve true si se envio. */
-    private boolean publicarComando(String comando) {
-        MqttClient cliente = null;
-        try {
-            cliente = new MqttClient(ConfiguracionMqtt.BROKER_URI, MqttClient.generateClientId(), new MemoryPersistence());
-            MqttConnectOptions opciones = new MqttConnectOptions();
-            opciones.setCleanSession(true);
-            opciones.setConnectionTimeout(ConfiguracionMqtt.TIMEOUT_CONEXION_S);
-            cliente.connect(opciones);
-
-            MqttMessage mensaje = new MqttMessage(comando.getBytes());
-            mensaje.setQos(MQTT_QOS);
-            cliente.publish(ConfiguracionMqtt.TOPIC_COMANDO, mensaje);
-            return true;
-        } catch (MqttException e) {
-            return false;
-        } finally {
-            cerrarCliente(cliente);
-        }
-    }
-
-    /** Desconecta y libera el cliente MQTT, ignorando errores al cerrar. */
-    private void cerrarCliente(MqttClient cliente) {
-        if (cliente == null) {
-            return;
-        }
-        try {
-            if (cliente.isConnected()) {
-                cliente.disconnect();
-            }
-            cliente.close();
-        } catch (MqttException ignorada) {
-            // No hay nada mas que hacer si falla el cierre.
-        }
-    }
-
-    /** Actualiza el estado y la UI segun el resultado del envio. */
-    private void alFinalizarEnvio(String comando, boolean enviado) {
-        envioComandoEnCurso = false;
-        actualizarDisponibilidadComandos();
-        if (!enviado) {
-            Toast.makeText(this, R.string.msg_error_broker, Toast.LENGTH_SHORT).show();
-            return;
-        }
-        ultimoComando = comando;
-        Toast.makeText(this, getString(R.string.msg_comando_enviado, comando), Toast.LENGTH_SHORT).show();
-    }
-
     /** Abre la pantalla del grafico de temperatura mediante un Intent explicito. */
     private void abrirGrafico() {
         Intent intent = new Intent(this, GraficoActivity.class);
         startActivity(intent);
     }
 
+    /** Inicia el servicio MQTT en primer plano. */
     private void iniciarServicioMqtt() {
         Intent intent = new Intent(this, MqttManagerService.class);
         ContextCompat.startForegroundService(this, intent);
     }
 
+    /** Solicita permisos de notificacion requeridos para Android 13+. */
     private void solicitarPermisoNotificaciones() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
                 && ContextCompat.checkSelfPermission(

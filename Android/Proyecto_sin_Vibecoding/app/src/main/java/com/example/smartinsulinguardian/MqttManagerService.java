@@ -1,17 +1,17 @@
 package com.example.smartinsulinguardian;
 
-import android.app.Service;
-import android.content.Intent;
-import android.os.IBinder;
-import android.util.Log;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
+import android.app.Service;
+import android.content.Intent;
 import android.content.pm.ServiceInfo;
+import android.os.Binder;
 import android.os.Build;
+import android.os.IBinder;
+import android.util.Log;
 
-import androidx.annotation.Nullable;
 import androidx.core.app.NotificationCompat;
 
 import org.eclipse.paho.client.mqttv3.IMqttDeliveryToken;
@@ -22,10 +22,19 @@ import org.eclipse.paho.client.mqttv3.MqttException;
 import org.eclipse.paho.client.mqttv3.MqttMessage;
 import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence;
 
-import java.util.concurrent.ExecutorService;
+import java.nio.charset.StandardCharsets;
 import java.util.concurrent.Executors;
 import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 
+/**
+ * Servicio en primer plano que mantiene la unica conexion MQTT
+ * de la aplicacion. Se suscribe a temperatura y estado, y expone
+ * publicarComando() a las Activities mediante un Binder local.
+ * Toda operacion de red se serializa en un solo hilo (ejecutorMqtt).
+ */
 public class MqttManagerService extends Service {
 
     private static final String CANAL_MONITOREO =
@@ -33,14 +42,29 @@ public class MqttManagerService extends Service {
 
     private static final int ID_NOTIFICACION_MONITOREO = 100;
     private static final String TAG = "MQTT";
-    private static final int MQTT_QOS = 0;
 
-    private final ExecutorService ejecutorMqtt =
-            Executors.newSingleThreadExecutor();
+    private final ScheduledExecutorService ejecutorMqtt =
+            Executors.newSingleThreadScheduledExecutor();
+
+    private final IBinder binder = new BinderLocal();
 
     private volatile boolean cerrando = false;
-
     private MqttClient cliente;
+    private ScheduledFuture<?> reintentoActivo;
+
+    /**
+     * Binder local que permite a las Activities obtener una
+     * referencia al servicio para invocar publicarComando().
+     */
+    public class BinderLocal extends Binder {
+
+        /** Devuelve la instancia del servicio. */
+        public MqttManagerService getServicio() {
+            return MqttManagerService.this;
+        }
+    }
+
+    // ── Ciclo de vida ─────────────────────────────────────────
 
     @Override
     public void onCreate() {
@@ -60,10 +84,10 @@ public class MqttManagerService extends Service {
         return START_STICKY;
     }
 
-    @Nullable
+    /** Devuelve el Binder para que las Activities envien comandos. */
     @Override
     public IBinder onBind(Intent intent) {
-        return null;
+        return binder;
     }
 
     @Override
@@ -72,31 +96,47 @@ public class MqttManagerService extends Service {
 
         Log.d(TAG, "Destruyendo servicio MQTT");
 
-        ejecutorMqtt.execute(this::desconectar);
-        ejecutorMqtt.shutdown();
+        cancelarReintento();
+        ejecutorMqtt.shutdownNow();
+        desconectar();
 
         stopForeground(STOP_FOREGROUND_REMOVE);
 
         super.onDestroy();
     }
 
+    // ── Conexion ──────────────────────────────────────────────
+
     /**
-     * Establece la conexión con el broker MQTT.
+     * Establece la conexion con el broker MQTT. Si falla,
+     * programa un reintento. Reutiliza el mismo cliente si
+     * ya fue creado previamente.
      */
     private void conectar() {
-
-        if (cerrando || cliente != null) {
+        if (cerrando) {
             return;
         }
 
-        try {
-            cliente = new MqttClient(
-                    ConfiguracionMqtt.BROKER_URI,
-                    MqttClient.generateClientId(),
-                    new MemoryPersistence()
-            );
+        cancelarReintento();
 
-            cliente.setCallback(new ReceptorTemperatura());
+        GuardianApplication app =
+                (GuardianApplication) getApplication();
+        app.postEstadoConexion(EstadoConexion.CONECTANDO);
+
+        try {
+            if (cliente == null) {
+                cliente = new MqttClient(
+                        ConfiguracionMqtt.BROKER_URI,
+                        MqttClient.generateClientId(),
+                        new MemoryPersistence()
+                );
+
+                cliente.setCallback(new ReceptorMensajes());
+            }
+
+            if (cliente.isConnected()) {
+                return;
+            }
 
             MqttConnectOptions opciones = new MqttConnectOptions();
 
@@ -108,19 +148,47 @@ public class MqttManagerService extends Service {
 
             cliente.connect(opciones);
 
-            Log.d(TAG, "Conexión con el broker establecida");
+            Log.d(TAG, "Conexion con el broker establecida");
 
         } catch (MqttException e) {
             Log.e(TAG, "Error al conectar con el broker", e);
-            desconectar();
+            programarReintento();
         }
     }
 
     /**
-     * Desconecta y libera el cliente MQTT.
+     * Programa un unico reintento de conexion. Si ya hay uno
+     * activo, no acumula otro.
      */
-    private void desconectar() {
+    private void programarReintento() {
+        if (cerrando || reintentoActivo != null) {
+            return;
+        }
 
+        GuardianApplication app =
+                (GuardianApplication) getApplication();
+        app.postEstadoConexion(EstadoConexion.ERROR);
+
+        Log.d(TAG, "Reintentando conexion en "
+                + ConfiguracionMqtt.REINTENTO_CONEXION_S + " s");
+
+        reintentoActivo = ejecutorMqtt.schedule(
+                this::conectar,
+                ConfiguracionMqtt.REINTENTO_CONEXION_S,
+                TimeUnit.SECONDS
+        );
+    }
+
+    /** Cancela el reintento pendiente, si existe. */
+    private void cancelarReintento() {
+        if (reintentoActivo != null) {
+            reintentoActivo.cancel(false);
+            reintentoActivo = null;
+        }
+    }
+
+    /** Desconecta y libera el cliente MQTT. */
+    private void desconectar() {
         if (cliente == null) {
             return;
         }
@@ -146,28 +214,211 @@ public class MqttManagerService extends Service {
         Log.d(TAG, "Cliente MQTT desconectado");
     }
 
+    // ── Suscripcion ───────────────────────────────────────────
+
     /**
-     * Se suscribe al tópico de temperatura.
+     * Se suscribe a los topicos de temperatura y estado.
+     * Se invoca despues de cada conexion o reconexion exitosa.
      */
     private void suscribir() {
-
         try {
-            if (!cerrando && cliente != null && cliente.isConnected()) {
-
-                cliente.subscribe(
-                        ConfiguracionMqtt.TOPIC_TEMPERATURA,
-                        MQTT_QOS
-                );
-
-                Log.d(TAG, "Suscrito al tópico temperatura");
+            if (cerrando || cliente == null
+                    || !cliente.isConnected()) {
+                return;
             }
+
+            cliente.subscribe(
+                    ConfiguracionMqtt.TOPIC_TEMPERATURA,
+                    ConfiguracionMqtt.QOS_SUSCRIPCION
+            );
+
+            cliente.subscribe(
+                    ConfiguracionMqtt.TOPIC_ESTADO,
+                    ConfiguracionMqtt.QOS_SUSCRIPCION
+            );
+
+            Log.d(TAG, "Suscrito a temperatura y estado");
 
         } catch (MqttException e) {
             Log.e(TAG, "Error al suscribirse", e);
         }
     }
 
+    // ── Comandos ──────────────────────────────────────────────
 
+    /**
+     * Publica un comando (SILENCIAR o REACTIVAR) en el broker.
+     * Si el servicio se esta cerrando, reporta error de inmediato.
+     * El resultado se notifica a las Activities por LiveData.
+     * Este metodo lo invoca la Activity a traves del Binder.
+     */
+    public void publicarComando(String comando) {
+        GuardianApplication app =
+                (GuardianApplication) getApplication();
+
+        if (cerrando) {
+            app.postResultadoComando(
+                    new ResultadoComando(comando, false)
+            );
+            return;
+        }
+
+        try {
+            ejecutorMqtt.execute(
+                    () -> ejecutarPublicacion(comando, app)
+            );
+
+        } catch (RejectedExecutionException ignorada) {
+            app.postResultadoComando(
+                    new ResultadoComando(comando, false)
+            );
+        }
+    }
+
+    /**
+     * Ejecuta la publicacion del comando en el hilo del ejecutor.
+     * Actualiza ultimoComando en la Application si tiene exito.
+     */
+    private void ejecutarPublicacion(
+            String comando, GuardianApplication app) {
+
+        if (cerrando || cliente == null
+                || !cliente.isConnected()) {
+            app.postResultadoComando(
+                    new ResultadoComando(comando, false)
+            );
+            return;
+        }
+
+        try {
+            MqttMessage mensaje = new MqttMessage(
+                    comando.getBytes(StandardCharsets.UTF_8)
+            );
+            mensaje.setQos(ConfiguracionMqtt.QOS_COMANDO);
+
+            cliente.publish(
+                    ConfiguracionMqtt.TOPIC_COMANDO, mensaje
+            );
+
+            app.setUltimoComando(comando);
+            app.postResultadoComando(
+                    new ResultadoComando(comando, true)
+            );
+
+            Log.d(TAG, "Comando publicado: " + comando);
+
+        } catch (MqttException e) {
+            Log.e(TAG, "Error al publicar comando", e);
+            app.postResultadoComando(
+                    new ResultadoComando(comando, false)
+            );
+        }
+    }
+
+    // ── Procesamiento de mensajes ─────────────────────────────
+
+    /**
+     * Procesa un mensaje del topico de temperatura: lo almacena
+     * en el historial y actualiza el LiveData de temperatura actual.
+     */
+    private void procesarTemperatura(
+            String contenido, GuardianApplication app) {
+
+        try {
+            float temperatura = Float.parseFloat(contenido);
+
+            if (!Float.isFinite(temperatura)) {
+                return;
+            }
+
+            long marcaTiempoMs = System.currentTimeMillis();
+
+            app.getHistorialTemperaturas().agregar(
+                    temperatura, marcaTiempoMs
+            );
+            app.notificarCambioHistorial();
+            app.postTemperaturaActual(temperatura);
+
+            Log.d(TAG, "Temperatura almacenada: " + temperatura);
+
+        } catch (NumberFormatException e) {
+            Log.w(TAG, "Temperatura invalida recibida");
+        }
+    }
+
+    // ── Callback MQTT ─────────────────────────────────────────
+
+    /**
+     * Recibe los eventos del cliente MQTT y despacha
+     * por topico (temperatura o estado de la FSM).
+     */
+    private class ReceptorMensajes implements MqttCallbackExtended {
+
+        @Override
+        public void connectComplete(
+                boolean reconexion, String uriServidor) {
+
+            GuardianApplication app =
+                    (GuardianApplication) getApplication();
+            app.postEstadoConexion(EstadoConexion.CONECTADO);
+
+            if (!cerrando && !ejecutorMqtt.isShutdown()) {
+                try {
+                    ejecutorMqtt.execute(
+                            MqttManagerService.this::suscribir
+                    );
+
+                } catch (RejectedExecutionException ignorada) {
+                    // El ejecutor se esta cerrando.
+                }
+            }
+        }
+
+        @Override
+        public void messageArrived(
+                String topico, MqttMessage mensaje) {
+
+            if (cerrando) {
+                return;
+            }
+
+            String contenido = new String(
+                    mensaje.getPayload(), StandardCharsets.UTF_8
+            ).trim();
+
+            GuardianApplication app =
+                    (GuardianApplication) getApplication();
+
+            if (ConfiguracionMqtt.TOPIC_TEMPERATURA
+                    .equals(topico)) {
+                procesarTemperatura(contenido, app);
+
+            } else if (ConfiguracionMqtt.TOPIC_ESTADO
+                    .equals(topico)) {
+                app.postEstadoFsm(contenido);
+                Log.d(TAG, "Estado recibido: " + contenido);
+            }
+        }
+
+        @Override
+        public void connectionLost(Throwable causa) {
+            Log.e(TAG,
+                    "Se perdio la conexion MQTT", causa);
+
+            GuardianApplication app =
+                    (GuardianApplication) getApplication();
+            app.postEstadoConexion(EstadoConexion.RECONECTANDO);
+        }
+
+        @Override
+        public void deliveryComplete(IMqttDeliveryToken token) {
+            // Nada que hacer tras la entrega.
+        }
+    }
+
+    // ── Notificacion ──────────────────────────────────────────
+
+    /** Crea el canal de notificacion requerido en Android 8+. */
     private void crearCanalNotificacion() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
             return;
@@ -189,6 +440,7 @@ public class MqttManagerService extends Service {
         notificationManager.createNotificationChannel(canal);
     }
 
+    /** Inicia el servicio en primer plano con su notificacion persistente. */
     private void iniciarEnPrimerPlano() {
         Intent intentAbrirApp =
                 new Intent(this, MainActivity.class);
@@ -244,77 +496,5 @@ public class MqttManagerService extends Service {
                     notificacion
             );
         }
-    }
-
-    /**
-     * Recibe los eventos del cliente MQTT.
-     */
-    private class ReceptorTemperatura implements MqttCallbackExtended {
-
-        @Override
-        public void connectComplete(
-                boolean reconexion,
-                String uriServidor) {
-
-            if (!cerrando && !ejecutorMqtt.isShutdown()) {
-
-                try {
-                    ejecutorMqtt.execute(
-                            MqttManagerService.this::suscribir
-                    );
-
-                } catch (RejectedExecutionException ignorada) {
-                    // El ejecutor se está cerrando.
-                }
-            }
-        }
-
-        @Override
-        public void messageArrived(String topico, MqttMessage mensaje) {
-
-            if (cerrando) {
-                return;
-            }
-
-            try {
-                float temperatura = Float.parseFloat(
-                        new String(mensaje.getPayload()).trim()
-                );
-
-                if (!Float.isFinite(temperatura)) {
-                    return;
-                }
-
-                long marcaTiempoMs = System.currentTimeMillis();
-
-                GuardianApplication app =
-                        (GuardianApplication) getApplication();
-
-                // Guardar la temperatura en el historial.
-                app.getHistorialTemperaturas().agregar(
-                        temperatura,
-                        marcaTiempoMs
-                );
-
-                // Notificar al gráfico que hay nuevas lecturas.
-                app.notificarCambioHistorial();
-
-                Log.d(TAG, "Temperatura almacenada: " + temperatura);
-
-            } catch (NumberFormatException e) {
-                Log.w(TAG, "Temperatura inválida recibida");
-            }
-        }
-
-        @Override
-        public void connectionLost(Throwable causa) {
-            Log.e(TAG, "Se perdió la conexión MQTT", causa);
-        }
-
-        @Override
-        public void deliveryComplete(IMqttDeliveryToken token) {
-            // Este servicio no publica mensajes.
-        }
-
     }
 }

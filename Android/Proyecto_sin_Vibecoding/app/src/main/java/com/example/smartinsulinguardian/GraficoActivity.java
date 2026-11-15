@@ -42,6 +42,29 @@ public class GraficoActivity extends AppCompatActivity {
                 (GuardianApplication) getApplication();
 
         app.getLecturasLiveData().observe(this, this::actualizarGrafico);
+        app.getEstadoConexionLiveData().observe(this, this::actualizarEstadoConexion);
+    }
+
+    private void actualizarEstadoConexion(EstadoConexion estado) {
+        if (estado == null || tvConexion == null) {
+            return;
+        }
+
+        switch (estado) {
+            case CONECTADO:
+                tvConexion.setText(R.string.conexion_conectado);
+                break;
+            case RECONECTANDO:
+                tvConexion.setText(R.string.conexion_reconectando);
+                break;
+            case ERROR:
+                tvConexion.setText(R.string.conexion_error);
+                break;
+            case CONECTANDO:
+            default:
+                tvConexion.setText(R.string.conexion_conectando);
+                break;
+        }
     }
 
     private void actualizarGrafico(List<LecturaTemperatura> historial) {
