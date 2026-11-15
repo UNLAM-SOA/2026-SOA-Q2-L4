@@ -74,13 +74,11 @@ unsigned long tiempo_solicitud_temperatura = 0;
 bool medicion_temperatura_en_curso = false;
 
 QueueHandle_t eventQueue;
+SemaphoreHandle_t mutexDatosCompartidos = NULL;
 
-//variables compartidas entre la tarea del sensor y la tarea MQTT
-volatile float ultima_temperatura = 0.0;
-volatile bool temperatura_disponible = false;
-
-//indica a la tarea MQTT que hay un estado nuevo para publicar (se publica el inicial apenas conecta)
-volatile bool estado_pendiente_publicar = true;
+// Datos compartidos entre las tareas del sensor, la FSM y MQTT.
+float ultima_temperatura = 0.0;
+bool temperatura_disponible = false;
 
 /*------------------------ FIN DECLARACION VARIABLES GLOBALES ------------------------*/
 
@@ -127,6 +125,8 @@ enum states {
               ST_LUZ_DETECTADA_Y_PUERTA_ABIERTA
             } current_state;
 
+states estado_para_publicar = ST_INIT;
+bool estado_pendiente_publicar = false;
 
 String s_states [] = {
               "ST_INIT",
@@ -199,6 +199,27 @@ transition state_table[MAX_STATES][MAX_EVENTS] =
   /* ST_LUZ_DETECTADA_Y_PUERTA_ABIERTA */                { a_puerta,             none,             a_completo,      none,           none,              a_luz,             a_silenciar,      a_reactivar }
 };
 
+/* Actualiza el estado pendiente de publicacion bajo proteccion del mutex. */
+bool actualizar_estado_para_publicar(states estado)
+{
+    if(xSemaphoreTake(mutexDatosCompartidos, portMAX_DELAY) != pdTRUE)
+    {
+        Serial.println("ERROR: no se pudo tomar el mutex de datos compartidos");
+        return false;
+    }
+
+    estado_para_publicar = estado;
+    estado_pendiente_publicar = true;
+
+    if(xSemaphoreGive(mutexDatosCompartidos) != pdTRUE)
+    {
+        Serial.println("ERROR: no se pudo liberar el mutex de datos compartidos");
+        return false;
+    }
+
+    return true;
+}
+
 /* Espera un evento de la cola (bloqueante) y lo guarda en new_event. */
 void get_event()
 {
@@ -218,16 +239,18 @@ void state_machine()
     get_event();
 
     // Guardamos el estado anterior para poder imprimir un mensaje si hubo un cambio de estado DEBUG
-    int estado_anterior = current_state;
+    states estado_anterior = current_state;
 
     state_table[current_state][new_event]();
 
     // Imprimimos un mensaje si hubo un cambio de estado DEBUG
-    if (current_state != estado_anterior) {
+    if (current_state != estado_anterior)
+    {
+        states estado_actual = current_state;
         Serial.print("Cambio de estado: ");
-        Serial.println(s_states[current_state]);
+        Serial.println(s_states[estado_actual]);
 
-        estado_pendiente_publicar = true;
+        actualizar_estado_para_publicar(estado_actual);
     }
 }
 
@@ -329,8 +352,21 @@ void leer_sensor_temperatura(void* p)
         else if(millis() - tiempo_solicitud_temperatura >= TIEMPO_CONVERSION_TEMP_MS)
         {
             value = sensor_temperatura.getTempCByIndex(INDICE_SENSOR_TEMPERATURA);
-            ultima_temperatura = value; //para comunicarlo mediante MQTT
-            temperatura_disponible = true;
+
+            if(xSemaphoreTake(mutexDatosCompartidos, portMAX_DELAY) == pdTRUE)
+            {
+                ultima_temperatura = value;
+                temperatura_disponible = true;
+
+                if(xSemaphoreGive(mutexDatosCompartidos) != pdTRUE)
+                {
+                    Serial.println("ERROR: no se pudo liberar el mutex despues de guardar la temperatura");
+                }
+            }
+            else
+            {
+                Serial.println("ERROR: no se pudo tomar el mutex para guardar la temperatura");
+            }
 
             medicion_temperatura_en_curso = false;
             hay_evento = false;
@@ -480,23 +516,50 @@ void tarea_mqtt(void* p)
             {
                 mqttClient.loop();
 
-                // Publicar el estado de la FSM cuando cambia
-                if(estado_pendiente_publicar)
-                {
-                    estado_pendiente_publicar = false;
+                bool publicar_estado = false;
+                states estado_local = ST_INIT;
+                bool temperatura_disponible_local = false;
+                float ultima_temperatura_local = 0.0;
 
-                    mqttClient.publish(TOPIC_ESTADO, s_states[current_state].c_str(), MQTT_RETENER_MENSAJE);
+                if(xSemaphoreTake(mutexDatosCompartidos, portMAX_DELAY) == pdTRUE)
+                {
+                    publicar_estado = estado_pendiente_publicar;
+                    estado_local = estado_para_publicar;
+                    if(publicar_estado)
+                    {
+                        estado_pendiente_publicar = false;
+                    }
+
+                    temperatura_disponible_local = temperatura_disponible;
+                    ultima_temperatura_local = ultima_temperatura;
+
+                    if(xSemaphoreGive(mutexDatosCompartidos) != pdTRUE)
+                    {
+                        Serial.println("ERROR: no se pudo liberar el mutex despues de leer datos de publicacion");
+                        publicar_estado = false;
+                        temperatura_disponible_local = false;
+                    }
+                }
+                else
+                {
+                    Serial.println("ERROR: no se pudo tomar el mutex para leer datos de publicacion");
+                }
+
+                // Publicar el estado de la FSM cuando cambia
+                if(publicar_estado)
+                {
+                    mqttClient.publish(TOPIC_ESTADO, s_states[estado_local].c_str(), MQTT_RETENER_MENSAJE);
 
                     Serial.print("Estado enviado por MQTT: ");
-                    Serial.println(s_states[current_state]);
+                    Serial.println(s_states[estado_local]);
                 }
 
                 // Publicar temperatura cada cierto tiempo
-                if( temperatura_disponible && millis() - ultima_publicacion >= INTERVALO_PUBLICACION_MQTT_MS)
+                if( temperatura_disponible_local && millis() - ultima_publicacion >= INTERVALO_PUBLICACION_MQTT_MS)
                 {
                     char mensaje[TAMANIO_BUFFER_MENSAJE];
 
-                    dtostrf(ultima_temperatura, ANCHO_MINIMO_TEMPERATURA, DECIMALES_TEMPERATURA, mensaje);
+                    dtostrf(ultima_temperatura_local, ANCHO_MINIMO_TEMPERATURA, DECIMALES_TEMPERATURA, mensaje);
 
                     mqttClient.publish(TOPIC_TEMPERATURA, mensaje);
 
@@ -591,14 +654,33 @@ void setup()
     {
         Serial.println("Sensor de temperatura detectado correctamente");
 
+        mutexDatosCompartidos = xSemaphoreCreateMutex();
+        if(mutexDatosCompartidos == NULL)
+        {
+            Serial.println("ERROR: no se pudo crear el mutex de datos compartidos");
+            a_error();
+            return;
+        }
+
         eventQueue = xQueueCreate(MAX_EVENTS_QUEUE, sizeof(events));
+        if(eventQueue == NULL)
+        {
+            Serial.println("ERROR: no se pudo crear la cola de eventos");
+            a_error();
+            return;
+        }
+
+        a_seguro();
+        if(!actualizar_estado_para_publicar(current_state))
+        {
+            a_error();
+            return;
+        }
 
         xTaskCreate(leer_sensor_magnetico, "sensor magnetico", TAMANIO_STACK_SENSORES, NULL, PRIORIDAD_TAREAS, NULL);
         xTaskCreate(leer_sensor_luz, "sensor luminico", TAMANIO_STACK_SENSORES, NULL, PRIORIDAD_TAREAS, NULL);
         xTaskCreate(leer_sensor_temperatura, "sensor temperatura", TAMANIO_STACK_SENSORES, NULL, PRIORIDAD_TAREAS, NULL);
         xTaskCreate(tarea_mqtt, "MQTT", TAMANIO_STACK_MQTT, NULL, PRIORIDAD_TAREAS, NULL);
-
-        a_seguro();
     }
     else
     {
