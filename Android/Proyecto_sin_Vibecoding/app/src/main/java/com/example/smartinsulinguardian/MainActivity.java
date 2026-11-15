@@ -223,32 +223,9 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
 
         estadoConexionActual = estado;
 
-        int recursoTexto;
-        int recursoColor;
-
-        switch (estado) {
-            case CONECTADO:
-                recursoTexto = R.string.conexion_conectado;
-                recursoColor = R.color.conexion_conectado;
-                break;
-            case RECONECTANDO:
-                recursoTexto = R.string.conexion_reconectando;
-                recursoColor = R.color.conexion_conectando;
-                break;
-            case ERROR:
-                recursoTexto = R.string.conexion_error;
-                recursoColor = R.color.conexion_error;
-                break;
-            case CONECTANDO:
-            default:
-                recursoTexto = R.string.conexion_conectando;
-                recursoColor = R.color.conexion_conectando;
-                break;
-        }
-
-        tvConexion.setText(recursoTexto);
+        tvConexion.setText(estado.getRecursoTexto());
         viewConexion.setBackgroundTintList(ColorStateList.valueOf(
-                ContextCompat.getColor(this, recursoColor)));
+                ContextCompat.getColor(this, estado.getRecursoColor())));
 
         actualizarDisponibilidadComandos();
     }

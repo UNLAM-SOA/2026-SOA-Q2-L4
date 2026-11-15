@@ -33,7 +33,8 @@ import java.util.concurrent.TimeUnit;
  * Servicio en primer plano que mantiene la unica conexion MQTT
  * de la aplicacion. Se suscribe a temperatura y estado, y expone
  * publicarComando() a las Activities mediante un Binder local.
- * Toda operacion de red se serializa en un solo hilo (ejecutorMqtt).
+ * Toda operacion de red y manipulacion del cliente se serializa
+ * en un solo hilo (ejecutorMqtt).
  */
 public class MqttManagerService extends Service {
 
@@ -96,9 +97,15 @@ public class MqttManagerService extends Service {
 
         Log.d(TAG, "Destruyendo servicio MQTT");
 
-        cancelarReintento();
-        ejecutorMqtt.shutdownNow();
-        desconectar();
+        try {
+            ejecutorMqtt.execute(() -> {
+                cancelarReintento();
+                desconectar();
+            });
+        } catch (RejectedExecutionException ignorada) {
+            // El ejecutor se estaba cerrando
+        }
+        ejecutorMqtt.shutdown();
 
         stopForeground(STOP_FOREGROUND_REMOVE);
 
@@ -119,6 +126,10 @@ public class MqttManagerService extends Service {
 
         cancelarReintento();
 
+        if (cliente != null && cliente.isConnected()) {
+            return;
+        }
+
         GuardianApplication app =
                 (GuardianApplication) getApplication();
         app.postEstadoConexion(EstadoConexion.CONECTANDO);
@@ -132,10 +143,6 @@ public class MqttManagerService extends Service {
                 );
 
                 cliente.setCallback(new ReceptorMensajes());
-            }
-
-            if (cliente.isConnected()) {
-                return;
             }
 
             MqttConnectOptions opciones = new MqttConnectOptions();
@@ -218,9 +225,13 @@ public class MqttManagerService extends Service {
 
     /**
      * Se suscribe a los topicos de temperatura y estado.
-     * Se invoca despues de cada conexion o reconexion exitosa.
+     * Si las suscripciones tienen exito, postea CONECTADO.
+     * Si fallan, postea ERROR.
      */
     private void suscribir() {
+        GuardianApplication app =
+                (GuardianApplication) getApplication();
+
         try {
             if (cerrando || cliente == null
                     || !cliente.isConnected()) {
@@ -237,10 +248,12 @@ public class MqttManagerService extends Service {
                     ConfiguracionMqtt.QOS_SUSCRIPCION
             );
 
+            app.postEstadoConexion(EstadoConexion.CONECTADO);
             Log.d(TAG, "Suscrito a temperatura y estado");
 
         } catch (MqttException e) {
             Log.e(TAG, "Error al suscribirse", e);
+            app.postEstadoConexion(EstadoConexion.ERROR);
         }
     }
 
@@ -357,10 +370,6 @@ public class MqttManagerService extends Service {
         @Override
         public void connectComplete(
                 boolean reconexion, String uriServidor) {
-
-            GuardianApplication app =
-                    (GuardianApplication) getApplication();
-            app.postEstadoConexion(EstadoConexion.CONECTADO);
 
             if (!cerrando && !ejecutorMqtt.isShutdown()) {
                 try {
