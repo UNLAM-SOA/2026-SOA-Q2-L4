@@ -12,18 +12,18 @@
     <string name="estado_actual">Estado: %1$s</string>
     <string name="temperatura_inicial">Esperando lectura del sensor…</string>
     <string name="temperatura_actual">%1$.1f °C</string>
-    <string name="conexion_conectando">Conectando al broker MQTT…</string>
-    <string name="conexion_conectado">Broker MQTT conectado</string>
-    <string name="conexion_reconectando">Conexión perdida; intentando reconectar…</string>
-    <string name="conexion_error">No se pudo conectar al broker MQTT</string>
-    <string name="conexion_error_suscripcion">Conectado, pero no se pudieron suscribir los datos</string>
+    <string name="conexion_conectando">Conectando con el dispositivo…</string>
+    <string name="conexion_conectado">Conexión establecida</string>
+    <string name="conexion_reconectando">Conexión perdida; reconectando…</string>
+    <string name="conexion_error">Sin conexión con el dispositivo</string>
+    <string name="conexion_error_suscripcion">Error al sincronizar lecturas</string>
     <string name="conexion_dato_invalido">Se recibió una lectura de temperatura no válida</string>
     <string name="boton_silenciar">Silenciar alarma</string>
     <string name="boton_grafico">Ver gráfico de temperatura</string>
     <string name="boton_reactivar">Reactivar alarma</string>
     <string name="msg_comando_enviado">Comando %1$s enviado</string>
-    <string name="msg_error_broker">No se pudo enviar el comando al broker</string>
-    <string name="msg_error_conexion_broker">No se pudo conectar al broker</string>
+    <string name="msg_error_broker">No se pudo enviar la orden al dispositivo</string>
+    <string name="msg_error_conexion_broker">No se pudo establecer conexión</string>
     <string name="titulo_grafico">Temperatura (últimas lecturas)</string>
     <string name="titulo_barra_grafico">Gráfico de temperatura</string>
     <string name="etiqueta_historial">HISTORIAL TÉRMICO</string>
@@ -42,4 +42,16 @@
     <string name="canal_monitoreo_nombre">Monitoreo de temperatura</string>
     <string name="notificacion_monitoreo_titulo">Smart Insulin Guardian</string>
     <string name="notificacion_monitoreo_texto">Recibiendo temperaturas del dispositivo</string>
+
+    <!-- Estados de la FSM para el usuario -->
+    <string name="estado_fsm_init">Iniciando monitoreo…</string>
+    <string name="estado_fsm_error">Error de sensor</string>
+    <string name="estado_fsm_seguro">Seguro</string>
+    <string name="estado_fsm_temp">ALERTA:\n• Temperatura elevada</string>
+    <string name="estado_fsm_luz">ALERTA:\n• Luz detectada</string>
+    <string name="estado_fsm_puerta">ALERTA:\n• Puerta abierta</string>
+    <string name="estado_fsm_temp_luz">ALERTA:\n• Temperatura elevada\n• Luz detectada</string>
+    <string name="estado_fsm_temp_puerta">ALERTA:\n• Puerta abierta\n• Temperatura elevada</string>
+    <string name="estado_fsm_luz_puerta">ALERTA:\n• Puerta abierta\n• Luz detectada</string>
+    <string name="estado_fsm_completo">ALERTA CRÍTICA:\n• Puerta abierta\n• Temperatura elevada\n• Luz detectada</string>
 </resources>

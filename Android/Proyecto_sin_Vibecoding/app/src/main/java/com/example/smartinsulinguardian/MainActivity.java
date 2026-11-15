@@ -210,7 +210,7 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
             return;
         }
 
-        tvEstado.setText(getString(R.string.estado_actual, estado));
+        tvEstado.setText(obtenerTextoEstado(estado));
         ivEstado.setImageTintList(ColorStateList.valueOf(
                 ContextCompat.getColor(this, obtenerColorEstado(estado))));
     }
@@ -356,6 +356,48 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
             return R.color.estado_seguro;
         }
         return R.color.color_primario;
+    }
+
+    /** Asocia el estado MQTT con el texto legible para el usuario. */
+    private int obtenerTextoEstado(String estado) {
+        String estadoNormalizado = estado.toUpperCase(Locale.ROOT);
+        if (estadoNormalizado.contains("ERROR")) {
+            return R.string.estado_fsm_error;
+        }
+        if (estadoNormalizado.contains("INIT")) {
+            return R.string.estado_fsm_init;
+        }
+        if (estadoNormalizado.contains("SEGURO")) {
+            return R.string.estado_fsm_seguro;
+        }
+
+        boolean temperaturaElevada = estadoNormalizado.contains("TEMP_ELEVADA");
+        boolean luzDetectada = estadoNormalizado.contains("LUZ_DETECTADA");
+        boolean puertaAbierta = estadoNormalizado.contains("PUERTA_ABIERTA");
+
+        if (temperaturaElevada && luzDetectada && puertaAbierta) {
+            return R.string.estado_fsm_completo;
+        }
+        if (temperaturaElevada && luzDetectada) {
+            return R.string.estado_fsm_temp_luz;
+        }
+        if (temperaturaElevada && puertaAbierta) {
+            return R.string.estado_fsm_temp_puerta;
+        }
+        if (luzDetectada && puertaAbierta) {
+            return R.string.estado_fsm_luz_puerta;
+        }
+        if (temperaturaElevada) {
+            return R.string.estado_fsm_temp;
+        }
+        if (luzDetectada) {
+            return R.string.estado_fsm_luz;
+        }
+        if (puertaAbierta) {
+            return R.string.estado_fsm_puerta;
+        }
+
+        return R.string.estado_inicial;
     }
 
     /** Abre la pantalla del grafico de temperatura mediante un Intent explicito. */
