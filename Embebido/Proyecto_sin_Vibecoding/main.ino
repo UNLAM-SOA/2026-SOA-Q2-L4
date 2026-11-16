@@ -84,10 +84,10 @@ bool temperatura_disponible = false;
 
 /*------------------------ INICIO DECLARACION VARIABLES PARA LA COMUNICACION MQTT ------------------------*/
 // WIFI AULA / WOKWI
-//const char* WIFI_SSID = "SO Avanzados";
-//const char* WIFI_PASSWORD = "SOA.2019";
-const char* WIFI_SSID = "Wokwi-GUEST";
-const char* WIFI_PASSWORD = "";
+const char* WIFI_SSID = "SO Avanzados";
+const char* WIFI_PASSWORD = "SOA.2019";
+//const char* WIFI_SSID = "Wokwi-GUEST";
+//const char* WIFI_PASSWORD = "";
 
 // MQTT
 const char* MQTT_SERVER = "broker.emqx.io";
@@ -401,8 +401,8 @@ void escribirPWMLed(uint8_t pin, uint8_t canal, uint32_t valor)
 /* Establece el color del LED RGB con el brillo de cada canal (0 a BRILLO_MAXIMO). */
 void establecerColorRGB(uint8_t r, uint8_t g, uint8_t b)
 {
-  escribirPWMLed(PIN_LED_ROJO,  CANAL_PWM_ROJO,  r);
-  escribirPWMLed(PIN_LED_VERDE, CANAL_PWM_VERDE, g);
+  escribirPWMLed(PIN_LED_ROJO,  CANAL_PWM_ROJO,  g);
+  escribirPWMLed(PIN_LED_VERDE, CANAL_PWM_VERDE, r);
   escribirPWMLed(PIN_LED_AZUL,  CANAL_PWM_AZUL,  b);
 }
 
